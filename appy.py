@@ -477,7 +477,7 @@ def login():
             submit = st.form_submit_button("Acceder")
             
             if submit:
-                if user in ["admin", "cristian", "alejandra"] and password == "123":
+                if user in ["admin", "cristian"] and password == "123":
                     st.session_state.usuario = user
                     st.rerun()
                 else:
@@ -785,12 +785,13 @@ def main_app():
                     temp = df_filtrado.copy()
                     temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0) if col_valor else 0
                     
-                    # Agrupación por Paciente
-                    resumen_paciente = temp.groupby(col_paciente).agg(
-                        Total_Procedimientos=(col_procedimiento, 'count'),
-                        Tipos_Procedimientos=(col_procedimiento, lambda x: len(set(x))),
-                        Valor_Total=('_valor', 'sum')
-                    ).reset_index()
+                    # Agrupación por Paciente - Método Compatible
+                    g = temp.groupby(col_paciente)
+                    resumen_paciente = pd.DataFrame({
+                        "Total_Procedimientos": g[col_procedimiento].count(),
+                        "Tipos_Procedimientos": g[col_procedimiento].nunique(),
+                        "Valor_Total": g['_valor'].sum()
+                    }).reset_index()
                     
                     resumen_paciente = resumen_paciente.sort_values("Total_Procedimientos", ascending=False)
                     
@@ -802,7 +803,7 @@ def main_app():
                             "Total_Procedimientos": st.column_config.NumberColumn(
                                 "Total Procedimientos",
                                 help="Cantidad total de procedimientos realizados a este paciente",
-                                format="%d 🏥"
+                                format="%d"
                             ),
                             "Tipos_Procedimientos": st.column_config.NumberColumn(
                                 "Tipos Únicos",
@@ -873,7 +874,7 @@ def main_app():
                     "Cantidad": st.column_config.NumberColumn(
                         "Frecuencia",
                         help="Cantidad de veces realizado",
-                        format="%d 🔢"
+                        format="%d"
                     ),
                     "Valor Total": st.column_config.TextColumn(
                         "Valor Total",
@@ -921,7 +922,7 @@ def main_app():
                         "Servicios": st.column_config.NumberColumn(
                             "Servicios",
                             help="Total de servicios realizados",
-                            format="%d 🏥"
+                            format="%d"
                         ),
                         "Porcentaje": st.column_config.ProgressColumn(
                             "Cumplimiento Meta",
@@ -947,7 +948,7 @@ def main_app():
                         "Servicios": st.column_config.NumberColumn(
                             "Servicios",
                             help="Total de servicios realizados",
-                            format="%d 🏥"
+                            format="%d"
                         ),
                         "Porcentaje": st.column_config.ProgressColumn(
                             "Cumplimiento",
@@ -1028,8 +1029,14 @@ def main_app():
             st.plotly_chart(fig_pie, use_container_width=True)
 
 # ===================== MAIN EXECUTION =====================
-if st.session_state.usuario:
-    main_app()
-else:
-    login()
+if __name__ == "__main__":
+    try:
+        if st.session_state.usuario:
+            main_app()
+        else:
+            login()
+    except Exception as e:
+        st.error(f"Ocurrió un error inesperado en la aplicación: {e}")
+        st.warning("Por favor intente recargar la página o contacte al administrador.")
+
 
