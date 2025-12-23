@@ -451,9 +451,29 @@ def main_app():
                     
                     # Ordenar y formatear
                     agrupado = agrupado.sort_values([col_profesional, "Total_Servicios"], ascending=[True, False])
-                    agrupado["Valor_Total"] = agrupado["Valor_Total"].apply(formato_pesos)
                     
-                    st.dataframe(agrupado, use_container_width=True)
+                    # Estilización de dataframe
+                    st.dataframe(
+                        agrupado, 
+                        column_config={
+                            col_profesional: "Profesional",
+                            col_procedimiento: "Procedimiento",
+                            "Total_Servicios": st.column_config.ProgressColumn(
+                                "Total Servicios",
+                                help="Cantidad de servicios realizados",
+                                format="%d",
+                                min_value=0,
+                                max_value=int(agrupado["Total_Servicios"].max()),
+                            ),
+                            "Valor_Total": st.column_config.NumberColumn(
+                                "Valor Total",
+                                help="Valor monetario total",
+                                format="$ %d"
+                            )
+                        },
+                        hide_index=True,
+                        use_container_width=True
+                    )
                 except Exception as e:
                     st.error(f"Error generando resumen profesional: {e}")
             else:
@@ -509,8 +529,18 @@ def main_app():
             temp["_val"] = pd.to_numeric(temp[col_val], errors='coerce').fillna(0)
             agrupado = temp.groupby(col_proc)["_val"].sum().reset_index().sort_values("_val", ascending=False)
             
-            fig = px.bar(agrupado, x=col_proc, y="_val", text="_val", title="Valor por Procedimiento")
-            fig.update_traces(texttemplate="%{text:,.0f}", textposition="outside")
+            # Gráfico dinámico y colorido
+            fig = px.bar(
+                agrupado, 
+                x=col_proc, 
+                y="_val", 
+                text="_val", 
+                title="Valor por Procedimiento",
+                color=col_proc,  # Colores dinámicos por procedimiento
+                labels={"_val": "Valor Total", col_proc: "Procedimiento"}
+            )
+            fig.update_traces(texttemplate="%{text:$,.0f}", textposition="outside")
+            fig.update_layout(showlegend=False) # Ocultar leyenda si hay muchas barras
             st.plotly_chart(fig, use_container_width=True)
 
     # TAB 3: DASHBOARD
@@ -525,11 +555,47 @@ def main_app():
             counts = df_filtrado[col_prof].value_counts().reset_index()
             counts.columns = ["Profesional", "Servicios"]
             
-            # Ranking visual
-            for _, row in counts.head(10).iterrows():
-                pct = (row["Servicios"] / meta_dash * 100) if meta_dash > 0 else 0
-                st.write(f"**{row['Profesional']}**: {row['Servicios']} ({pct:.1f}%)")
-                st.progress(min(pct/100, 1.0))
+            # Calcular porcentajes
+            if meta_dash > 0:
+                counts["Porcentaje"] = (counts["Servicios"] / meta_dash * 100)
+            else:
+                counts["Porcentaje"] = 0
+            
+            # Dividir pantalla
+            col_dash_left, col_dash_right = st.columns(2)
+            
+            with col_dash_left:
+                st.markdown("### 📋 Todos los Profesionales")
+                fig_all = px.bar(
+                    counts, 
+                    x="Servicios", 
+                    y="Profesional", 
+                    orientation='h',
+                    text="Porcentaje",
+                    title="Rendimiento General",
+                    color="Servicios",
+                    color_continuous_scale="Viridis"
+                )
+                fig_all.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+                fig_all.update_layout(yaxis={'categoryorder':'total ascending'}, height=600)
+                st.plotly_chart(fig_all, use_container_width=True)
+                
+            with col_dash_right:
+                st.markdown("### 🏆 Top 10 Profesionales")
+                top_10 = counts.head(10).sort_values("Servicios", ascending=True) # Sort for chart
+                fig_top = px.bar(
+                    top_10, 
+                    x="Servicios", 
+                    y="Profesional", 
+                    orientation='h',
+                    text="Porcentaje",
+                    title="Top 10 Rendimiento",
+                    color="Servicios",
+                    color_continuous_scale="Magma"
+                )
+                fig_top.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+                fig_top.update_layout(height=600)
+                st.plotly_chart(fig_top, use_container_width=True)
     
     # TAB 4: CUMPLIMIENTO
     with tab4:
@@ -556,4 +622,3 @@ if st.session_state.usuario:
     main_app()
 else:
     login()
-
