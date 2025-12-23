@@ -1,0 +1,6 @@
+gradio
+pandas
+plotly
+openpyxl
+xlsxwriter
+streamlit
