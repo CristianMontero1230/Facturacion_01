@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+import streamlit.components.v1 as components
 import os
 import json
 import re
@@ -66,6 +68,12 @@ def load_css():
         color: #005f73;
         font-weight: bold;
         display: inline-block;
+    }
+    
+    /* Hover Row Effect (Solo afecta tablas HTML standard, no st.dataframe canvas) */
+    tr:hover {
+        background-color: #d0f0c0 !important;
+        cursor: pointer;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -490,6 +498,34 @@ def eliminar_consolidado():
 def main_app():
     load_css()
     
+    # --- MENSAJE BIENVENIDA (JS 10s) ---
+    if 'welcome_shown' not in st.session_state:
+        st.session_state.welcome_shown = True
+        components.html(f"""
+        <script>
+            var msg = document.createElement('div');
+            msg.innerHTML = "👋 BIENVENIDO {st.session_state.usuario}";
+            msg.style.position = 'fixed';
+            msg.style.top = '20px';
+            msg.style.left = '50%';
+            msg.style.transform = 'translateX(-50%)';
+            msg.style.backgroundColor = '#005f73';
+            msg.style.color = 'white';
+            msg.style.padding = '15px 30px';
+            msg.style.borderRadius = '10px';
+            msg.style.zIndex = '9999';
+            msg.style.fontSize = '20px';
+            msg.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+            msg.style.textAlign = 'center';
+            document.body.appendChild(msg);
+            setTimeout(function() {{
+                msg.style.transition = 'opacity 1s';
+                msg.style.opacity = '0';
+                setTimeout(function() {{ document.body.removeChild(msg); }}, 1000);
+            }}, 10000);
+        </script>
+        """, height=0)
+    
     # --- HEADER ---
     col1, col2, col3, col4 = st.columns([2, 4, 2, 2])
     with col1:
@@ -521,8 +557,63 @@ def main_app():
              st.session_state.df_ciudades = st.session_state.df
 
     df = st.session_state.df
+
+    # --- FILTROS (Mover arriba para tener df_filtrado y botones disponibles) ---
+    # Nota: Los filtros se renderizan en Sidebar, pero la lógica de filtrado se ejecuta aquí
+    # para poder mostrar los botones de descarga ARRIBA.
     
-    # --- TABS ---
+    st.sidebar.header("🔍 Filtros de Análisis")
+    
+    profs = get_dropdown_options(df, ["profesional"])
+    procs = get_dropdown_options(df, ["nombre procedimiento"])
+    ciudades_df = st.session_state.get('df_ciudades', df)
+    ciuds = get_dropdown_options(ciudades_df, ["ciudad", "municipio"])
+    if not ciuds:
+         ciuds = get_dropdown_options(ciudades_df, ["sede"])
+    
+    sel_prof = st.sidebar.selectbox("Profesional", ["Todos"] + profs)
+    sel_proc = st.sidebar.selectbox("Procedimiento", ["Todos"] + procs)
+    sel_ciud = st.sidebar.selectbox("Ciudad / Municipio", ["Todos"] + ciuds)
+    
+    col_d1, col_d2 = st.sidebar.columns(2)
+    with col_d1:
+        f_ini = st.date_input("Fecha Inicio", value=None)
+    with col_d2:
+        f_fin = st.date_input("Fecha Fin", value=None)
+    
+    prof_arg = sel_prof if sel_prof != "Todos" else None
+    proc_arg = sel_proc if sel_proc != "Todos" else None
+    ciud_arg = sel_ciud if sel_ciud != "Todos" else None
+    
+    df_filtrado, aviso = filtrar_datos(df, prof_arg, f_ini, f_fin, proc_arg, ciud_arg)
+    
+    if aviso:
+        st.sidebar.warning(aviso)
+
+    # --- INFO ESTADO Y DESCARGAS (SUPERIOR) ---
+    fecha_update = cargar_fecha_actualizacion()
+    
+    # Layout de botones e info
+    col_info, col_btn1, col_btn2 = st.columns([2, 1, 1])
+    with col_info:
+        st.info(f"🕒 {fecha_update} | 📦 Consolidado")
+    with col_btn1:
+        if os.path.exists("archivo_consolidado.xlsx"):
+            with open("archivo_consolidado.xlsx", "rb") as f:
+                st.download_button("📥 Descargar Consolidado", f, file_name="archivo_consolidado.xlsx", use_container_width=True)
+    with col_btn2:
+        if not df_filtrado.empty:
+            excel_data = generar_excel_filtros(df_filtrado, prof_arg, f_ini, f_fin, proc_arg, ciud_arg)
+            st.download_button("📊 Descargar Filtros", excel_data, file_name="reporte_filtrado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+    # --- VALIDACIÓN DE DATOS ---
+    if df is None:
+        st.warning("No hay datos cargados. Por favor cargue archivos en la pestaña correspondiente (Admin).")
+        # Mostrar tabs básicos si es admin para permitir carga
+        if st.session_state.usuario != "admin":
+            return
+
+    # --- TABS DEFINITION ---
     tabs_names = ["📊 ANÁLISIS", "💰 TOTAL", "🏆 DASHBOARD", "✅ CUMPLIMIENTO", "🔄 CRUCES DE DATOS"]
     if st.session_state.usuario == "admin":
         tabs_names.insert(0, "📂 CONSOLIDACIÓN")
@@ -606,7 +697,7 @@ def main_app():
                             st.metric("Solo en Archivo A", len(no_en_b))
                         with col_res3:
                             st.metric("Solo en Archivo B", len(no_en_a))
-                            
+                        
                         tab_res1, tab_res2, tab_res3 = st.tabs(["✅ Coincidencias", "⚠️ Solo en A", "⚠️ Solo en B"])
                         
                         with tab_res1:
@@ -615,63 +706,16 @@ def main_app():
                             st.dataframe(no_en_b, use_container_width=True)
                         with tab_res3:
                             st.dataframe(no_en_a, use_container_width=True)
-                            
+                        
                     else:
                         st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
-                        
+                    
                 except Exception as e:
                     st.error(f"Error en el cruce: {e}")
 
+    # Si no hay datos y no es admin, no mostrar resto
     if df is None:
-        with tab1:
-            if st.session_state.usuario == "admin":
-                 st.warning("No hay datos cargados. Por favor suba un archivo en la pestaña 'CONSOLIDACIÓN'.")
-            else:
-                 st.warning("No hay datos cargados. Contacte al administrador.")
         return
-
-    # --- FILTROS (Mover arriba para tener df_filtrado disponible para descarga) ---
-    st.sidebar.header("🔍 Filtros de Análisis")
-    
-    profs = get_dropdown_options(df, ["profesional"])
-    procs = get_dropdown_options(df, ["nombre procedimiento"])
-    ciudades_df = st.session_state.get('df_ciudades', df)
-    ciuds = get_dropdown_options(ciudades_df, ["ciudad", "municipio"])
-    if not ciuds:
-         ciuds = get_dropdown_options(ciudades_df, ["sede"])
-    
-    sel_prof = st.sidebar.selectbox("Profesional", ["Todos"] + profs)
-    sel_proc = st.sidebar.selectbox("Procedimiento", ["Todos"] + procs)
-    sel_ciud = st.sidebar.selectbox("Ciudad / Municipio", ["Todos"] + ciuds)
-    
-    col_d1, col_d2 = st.sidebar.columns(2)
-    with col_d1:
-        f_ini = st.date_input("Fecha Inicio", value=None)
-    with col_d2:
-        f_fin = st.date_input("Fecha Fin", value=None)
-    
-    prof_arg = sel_prof if sel_prof != "Todos" else None
-    proc_arg = sel_proc if sel_proc != "Todos" else None
-    ciud_arg = sel_ciud if sel_ciud != "Todos" else None
-    
-    df_filtrado, aviso = filtrar_datos(df, prof_arg, f_ini, f_fin, proc_arg, ciud_arg)
-    
-    if aviso:
-        st.sidebar.warning(aviso)
-
-    # --- INFO ESTADO Y DESCARGAS ---
-    fecha_update = cargar_fecha_actualizacion()
-    st.info(f"🕒 Última actualización: {fecha_update} | 📦 Consolidado")
-    
-    col_dl1, col_dl2 = st.columns([1, 1])
-    with col_dl1:
-        if os.path.exists("archivo_consolidado.xlsx"):
-            with open("archivo_consolidado.xlsx", "rb") as f:
-                st.download_button("📥 Descargar Consolidado", f, file_name="archivo_consolidado.xlsx", use_container_width=True)
-    with col_dl2:
-        if not df_filtrado.empty:
-            excel_data = generar_excel_filtros(df_filtrado, prof_arg, f_ini, f_fin, proc_arg, ciud_arg)
-            st.download_button("📊 Descargar Filtros", excel_data, file_name="reporte_filtrado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
     # TAB 1: ANÁLISIS
     with tab1:
@@ -766,24 +810,49 @@ def main_app():
         if col_proc and col_val and not df_filtrado.empty:
             temp = df_filtrado.copy()
             temp["_val"] = pd.to_numeric(temp[col_val], errors='coerce').fillna(0)
-            agrupado = temp.groupby(col_proc)["_val"].sum().reset_index().sort_values("_val", ascending=False)
+            
+            # Agrupación más detallada
+            agrupado = temp.groupby(col_proc).agg(
+                Cantidad=(col_proc, 'count'),
+                Valor_Num=('_val', 'sum')
+            ).reset_index()
+            
+            agrupado = agrupado.sort_values("Valor_Num", ascending=False)
+            
+            # Calcular participación
+            total_global = agrupado["Valor_Num"].sum()
+            agrupado["Participacion"] = (agrupado["Valor_Num"] / total_global * 100) if total_global > 0 else 0
+            
+            # Formatear Valor (String con puntos)
+            agrupado["Valor Total"] = agrupado["Valor_Num"].apply(formato_pesos)
             
             st.subheader("Detalle por Procedimiento")
             
-            agrupado["Valor Formateado"] = agrupado["_val"].apply(formato_pesos)
-            
             st.dataframe(
-                agrupado[[col_proc, "Valor Formateado"]],
+                agrupado,
                 column_config={
-                    col_proc: "Nombre del Procedimiento",
-                    "Valor Formateado": st.column_config.TextColumn(
+                    col_proc: "Procedimiento",
+                    "Cantidad": st.column_config.NumberColumn(
+                        "Frecuencia",
+                        help="Cantidad de veces realizado",
+                        format="%d 🔢"
+                    ),
+                    "Valor Total": st.column_config.TextColumn(
                         "Valor Total",
-                        help="Valor total facturado por este procedimiento"
-                    )
+                        help="Valor facturado (COP)"
+                    ),
+                    "Participacion": st.column_config.ProgressColumn(
+                        "Participación %",
+                        format="%.1f%%",
+                        min_value=0,
+                        max_value=100,
+                        help="Peso sobre el total facturado"
+                    ),
+                    "Valor_Num": None 
                 },
                 hide_index=True,
                 use_container_width=True,
-                height=500
+                height=600
             )
 
     # TAB 3: DASHBOARD
@@ -831,39 +900,94 @@ def main_app():
                 
             with col_dash_right:
                 st.markdown("### 🏆 Top 10 Profesionales")
-                top_10 = counts.head(10).sort_values("Servicios", ascending=True)
-                fig_top = px.bar(
-                    top_10, 
-                    x="Servicios", 
-                    y="Profesional", 
-                    orientation='h',
-                    text="Porcentaje",
-                    title="Top 10 Rendimiento",
-                    color="Profesional",
+                top_10 = counts.head(10).sort_values("Servicios", ascending=False)
+                
+                st.dataframe(
+                    top_10,
+                    column_config={
+                        "Profesional": "Profesional",
+                        "Servicios": st.column_config.NumberColumn(
+                            "Servicios",
+                            help="Total de servicios realizados",
+                            format="%d 🏥"
+                        ),
+                        "Porcentaje": st.column_config.ProgressColumn(
+                            "Cumplimiento",
+                            help="Porcentaje respecto a la meta",
+                            format="%.1f%%",
+                            min_value=0,
+                            max_value=100
+                        )
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    height=600
                 )
-                fig_top.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-                fig_top.update_layout(height=600, showlegend=False)
-                st.plotly_chart(fig_top, use_container_width=True)
     
     # TAB 4: CUMPLIMIENTO
     with tab4:
         st.subheader("Cumplimiento de Meta")
-        meta_cump = st.number_input("Meta Cumplimiento", value=cargar_meta("meta_cumplimiento.txt"))
-        if st.button("Guardar Meta Cumplimiento"):
-            guardar_meta("meta_cumplimiento.txt", meta_cump)
-            
+        col_m1, col_m2 = st.columns([1, 2])
+        with col_m1:
+            meta_cump = st.number_input("Establecer Meta Mensual ($)", value=cargar_meta("meta_cumplimiento.txt"))
+            if st.button("💾 Guardar Meta"):
+                guardar_meta("meta_cumplimiento.txt", meta_cump)
+        
         total_actual = calcular_totales(df_filtrado)
         pct = (total_actual / meta_cump * 100) if meta_cump > 0 else 0
+        faltante = max(meta_cump - total_actual, 0)
         
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            st.metric("Total Actual", formato_pesos(total_actual))
-            st.metric("Meta", formato_pesos(meta_cump))
-            st.metric("Porcentaje", f"{pct:.2f}%")
+        st.divider()
         
-        with col_c2:
-            fig_pie = px.pie(names=["Logrado", "Faltante"], values=[min(total_actual, meta_cump), max(meta_cump - total_actual, 0)], hole=0.5)
-            st.plotly_chart(fig_pie)
+        # Métricas Principales
+        col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+        with col_kpi1:
+            st.markdown(f"<div style='padding:15px; background:#e0fbfc; border-radius:10px; border:1px solid #94d2bd; text-align:center;'><h3>💰 Recaudo Actual</h3><h2>{formato_pesos(total_actual)}</h2></div>", unsafe_allow_html=True)
+        with col_kpi2:
+            st.markdown(f"<div style='padding:15px; background:#ffddd2; border-radius:10px; border:1px solid #e29578; text-align:center;'><h3>📉 Faltante Meta</h3><h2>{formato_pesos(faltante)}</h2></div>", unsafe_allow_html=True)
+        with col_kpi3:
+             color_pct = "green" if pct >= 100 else "orange" if pct >= 80 else "red"
+             st.markdown(f"<div style='padding:15px; background:#edf6f9; border-radius:10px; border:1px solid #83c5be; text-align:center;'><h3>🎯 Porcentaje</h3><h2 style='color:{color_pct};'>{pct:.1f}%</h2></div>", unsafe_allow_html=True)
+
+        st.divider()
+
+        # Gráficos Avanzados
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            st.markdown("### 📊 Medidor de Progreso")
+            fig_gauge = go.Figure(go.Indicator(
+                mode = "gauge+number+delta",
+                value = total_actual,
+                domain = {'x': [0, 1], 'y': [0, 1]},
+                delta = {'reference': meta_cump, 'position': "top", 'valueformat': "$,.0f"},
+                gauge = {
+                    'axis': {'range': [0, meta_cump*1.2 if meta_cump > 0 else total_actual*1.2]},
+                    'bar': {'color': "#005f73"},
+                    'steps': [
+                        {'range': [0, meta_cump*0.5], 'color': "#e0fbfc"},
+                        {'range': [meta_cump*0.5, meta_cump*0.9], 'color': "#83c5be"}
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': meta_cump
+                    }
+                }
+            ))
+            fig_gauge.update_layout(height=400, margin=dict(l=20, r=20, t=50, b=20))
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+        with col_g2:
+            st.markdown("### 🥧 Distribución del Cumplimiento")
+            fig_pie = px.pie(
+                names=["Recaudado", "Faltante"], 
+                values=[total_actual, faltante], 
+                hole=0.6,
+                color_discrete_sequence=["#005f73", "#ffddd2"]
+            )
+            fig_pie.update_traces(textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
 
 # ===================== MAIN EXECUTION =====================
 if st.session_state.usuario:
