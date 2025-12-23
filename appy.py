@@ -374,6 +374,8 @@ def leer_excel(file_obj1, file_obj2=None):
             return st.session_state.get('df') or cargar_excel()
 
         df.columns = df.columns.astype(str).str.strip()
+        # Limpiar columnas Unnamed que causan error Arrow
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
         
         st.session_state.df = df
         guardar_excel(df)
@@ -1038,5 +1040,4 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Ocurrió un error inesperado en la aplicación: {e}")
         st.warning("Por favor intente recargar la página o contacte al administrador.")
-
 
