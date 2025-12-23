@@ -374,6 +374,8 @@ def eliminar_consolidado():
     try:
         if os.path.exists("archivo_consolidado.xlsx"):
             os.remove("archivo_consolidado.xlsx")
+        if os.path.exists("base_guardada.xlsx"):
+            os.remove("base_guardada.xlsx")
         st.session_state.df = None
         st.session_state.df_ciudades = None
         st.success("✅ Consolidado eliminado y datos reiniciados.")
@@ -394,9 +396,7 @@ def main_app():
         """, unsafe_allow_html=True)
     
     with col3:
-        if st.session_state.usuario == "admin" and os.path.exists("archivo_consolidado.xlsx"):
-             if st.button("🗑️ Eliminar Consolidado", type="primary"):
-                 eliminar_consolidado()
+        pass # Botón eliminado del header
                  
     with col4:
         if st.button("🔒 Cerrar sesión", type="secondary"):
@@ -464,12 +464,32 @@ def main_app():
         st.sidebar.warning(aviso)
     
     # --- TABS ---
-    tab_consol, tab1, tab2, tab3, tab4 = st.tabs(["� CONSOLIDACIÓN", "� ANÁLISIS", "💰 TOTAL", "🏆 DASHBOARD", "✅ CUMPLIMIENTO"])
+    # Definir tabs dinámicamente según rol
+    tabs_names = ["📊 ANÁLISIS", "💰 TOTAL", "🏆 DASHBOARD", "✅ CUMPLIMIENTO", "🔄 CRUCES DE DATOS"]
+    if st.session_state.usuario == "admin":
+        tabs_names.insert(0, "📂 CONSOLIDACIÓN")
+    
+    tabs = st.tabs(tabs_names)
+    
+    # Asignar variables a tabs
+    if st.session_state.usuario == "admin":
+        tab_consol = tabs[0]
+        tab1 = tabs[1]
+        tab2 = tabs[2]
+        tab3 = tabs[3]
+        tab4 = tabs[4]
+        tab_cruces = tabs[5]
+    else:
+        tab1 = tabs[0]
+        tab2 = tabs[1]
+        tab3 = tabs[2]
+        tab4 = tabs[3]
+        tab_cruces = tabs[4]
     
     # TAB CONSOLIDACIÓN (Solo Admin)
-    with tab_consol:
-        st.subheader("Gestión de Archivos")
-        if st.session_state.usuario == "admin":
+    if st.session_state.usuario == "admin":
+        with tab_consol:
+            st.subheader("Gestión de Archivos")
             st.markdown("Cargue los archivos para consolidar o actualizar la base de datos.")
             col_f1, col_f2 = st.columns(2)
             with col_f1:
@@ -477,12 +497,16 @@ def main_app():
             with col_f2:
                 archivo2 = st.file_uploader("Archivo 2 (Información Complementaria)", type=["xlsx"])
             
-            if archivo1:
-                if st.button("🔄 Procesar y Consolidar Archivos", type="primary"):
-                    leer_excel(archivo1, archivo2)
-                    st.rerun()
-        else:
-            st.info("Solo el administrador puede cargar y consolidar archivos.")
+            col_act1, col_act2 = st.columns(2)
+            with col_act1:
+                if archivo1:
+                    if st.button("🔄 Procesar y Consolidar Archivos", type="primary"):
+                        leer_excel(archivo1, archivo2)
+                        st.rerun()
+            with col_act2:
+                if os.path.exists("archivo_consolidado.xlsx"):
+                     if st.button("🗑️ Eliminar Consolidado Totalmente", type="secondary"):
+                         eliminar_consolidado()
             
     # TAB 1: ANÁLISIS
     with tab1:
@@ -586,13 +610,16 @@ def main_app():
             agrupado = temp.groupby(col_proc)["_val"].sum().reset_index().sort_values("_val", ascending=False)
             
             st.subheader("Detalle por Procedimiento")
+            
+            # Formatear valor para visualización
+            agrupado["Valor Formateado"] = agrupado["_val"].apply(formato_pesos)
+            
             st.dataframe(
-                agrupado,
+                agrupado[[col_proc, "Valor Formateado"]], # Mostrar columnas limpias
                 column_config={
                     col_proc: "Nombre del Procedimiento",
-                    "_val": st.column_config.NumberColumn(
+                    "Valor Formateado": st.column_config.TextColumn(
                         "Valor Total",
-                        format="$ %d",
                         help="Valor total facturado por este procedimiento"
                     )
                 },
@@ -681,6 +708,69 @@ def main_app():
         with col_c2:
             fig_pie = px.pie(names=["Logrado", "Faltante"], values=[min(total_actual, meta_cump), max(meta_cump - total_actual, 0)], hole=0.5)
             st.plotly_chart(fig_pie)
+
+    # TAB 5: CRUCES DE DATOS
+    with tab_cruces:
+        st.subheader("🔄 Cruce de Información")
+        st.markdown("Suba dos archivos para comparar registros y encontrar coincidencias o diferencias.")
+        
+        col_cruce1, col_cruce2 = st.columns(2)
+        with col_cruce1:
+            file_cruce1 = st.file_uploader("Archivo A (Base)", type=["xlsx"], key="cruce1")
+        with col_cruce2:
+            file_cruce2 = st.file_uploader("Archivo B (Comparar)", type=["xlsx"], key="cruce2")
+            
+        if file_cruce1 and file_cruce2:
+            if st.button("🔍 Comparar Archivos", type="primary"):
+                try:
+                    df_c1 = pd.read_excel(file_cruce1, engine="openpyxl")
+                    df_c2 = pd.read_excel(file_cruce2, engine="openpyxl")
+                    
+                    st.success(f"Archivos cargados: {df_c1.shape[0]} filas en A, {df_c2.shape[0]} filas en B")
+                    
+                    # Identificar columnas comunes
+                    common_cols = list(set(df_c1.columns) & set(df_c2.columns))
+                    
+                    if common_cols:
+                        col_key = st.selectbox("Seleccione columna clave para cruzar (ej: Cédula, Código)", common_cols)
+                        
+                        # Realizar cruce
+                        df_c1[col_key] = df_c1[col_key].astype(str).str.strip()
+                        df_c2[col_key] = df_c2[col_key].astype(str).str.strip()
+                        
+                        # Coincidencias
+                        coincidencias = pd.merge(df_c1, df_c2, on=col_key, how='inner', suffixes=('_A', '_B'))
+                        
+                        # Diferencias (En A pero no en B)
+                        no_en_b = df_c1[~df_c1[col_key].isin(df_c2[col_key])]
+                        
+                        # Diferencias (En B pero no en A)
+                        no_en_a = df_c2[~df_c2[col_key].isin(df_c1[col_key])]
+                        
+                        st.divider()
+                        
+                        col_res1, col_res2, col_res3 = st.columns(3)
+                        with col_res1:
+                            st.metric("Coincidencias", len(coincidencias))
+                        with col_res2:
+                            st.metric("Solo en Archivo A", len(no_en_b))
+                        with col_res3:
+                            st.metric("Solo en Archivo B", len(no_en_a))
+                            
+                        tab_res1, tab_res2, tab_res3 = st.tabs(["✅ Coincidencias", "⚠️ Solo en A", "⚠️ Solo en B"])
+                        
+                        with tab_res1:
+                            st.dataframe(coincidencias, use_container_width=True)
+                        with tab_res2:
+                            st.dataframe(no_en_b, use_container_width=True)
+                        with tab_res3:
+                            st.dataframe(no_en_a, use_container_width=True)
+                            
+                    else:
+                        st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
+                        
+                except Exception as e:
+                    st.error(f"Error en el cruce: {e}")
 
 # ===================== MAIN EXECUTION =====================
 if st.session_state.usuario:
