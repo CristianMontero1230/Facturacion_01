@@ -190,11 +190,11 @@ def leer_excel(file_obj1, file_obj2=None):
                         col_lower = col.lower()
                         if "fecha" in col_lower or "inicio" in col_lower or "fin" in col_lower or pd.api.types.is_datetime64_any_dtype(df_export[col]):
                             try:
+                                # Convertir a datetime real
                                 df_export[col] = pd.to_datetime(df_export[col], errors='coerce', dayfirst=True, format='mixed')
-                                df_export[col] = df_export[col].dt.strftime('%d/%m/%Y')
-                                df_export[col] = df_export[col].fillna("")
+                                # NO convertir a string (strftime) para mantener funcionalidad de filtro de fecha en Excel
                             except:
-                                df_export[col] = df_export[col].astype(str)
+                                pass
                         elif "profesional" in col_lower:
                             try:
                                 df_export[col] = df_export[col].astype(str).str.replace(r'^\d+\s*[-]?\s*', '', regex=True).str.strip()
@@ -216,7 +216,8 @@ def leer_excel(file_obj1, file_obj2=None):
                             output_path = f"archivo_consolidado_{int(datetime.now().timestamp())}.xlsx"
 
                     try:
-                        with pd.ExcelWriter(output_path, engine='xlsxwriter', engine_kwargs={'options': {'nan_inf_to_errors': True}}) as writer:
+                        # Usar xlsxwriter con formato de fecha explícito
+                        with pd.ExcelWriter(output_path, engine='xlsxwriter', engine_kwargs={'options': {'nan_inf_to_errors': True}}, date_format='dd/mm/yyyy', datetime_format='dd/mm/yyyy') as writer:
                              df_export.to_excel(writer, index=False)
                     except:
                         df_export.to_excel(output_path, index=False, engine='openpyxl')
@@ -565,20 +566,28 @@ def main_app():
             col_dash_left, col_dash_right = st.columns(2)
             
             with col_dash_left:
-                st.markdown("### 📋 Todos los Profesionales")
-                fig_all = px.bar(
-                    counts, 
-                    x="Servicios", 
-                    y="Profesional", 
-                    orientation='h',
-                    text="Porcentaje",
-                    title="Rendimiento General",
-                    color="Servicios",
-                    color_continuous_scale="Viridis"
+                st.markdown("### 📋 Rendimiento General")
+                st.dataframe(
+                    counts,
+                    column_config={
+                        "Profesional": "Profesional",
+                        "Servicios": st.column_config.NumberColumn(
+                            "Servicios",
+                            help="Total de servicios realizados",
+                            format="%d 🏥"
+                        ),
+                        "Porcentaje": st.column_config.ProgressColumn(
+                            "Cumplimiento Meta",
+                            help="Porcentaje respecto a la meta",
+                            format="%.1f%%",
+                            min_value=0,
+                            max_value=max(100, int(counts["Porcentaje"].max()) if not counts.empty else 100),
+                        )
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    height=600
                 )
-                fig_all.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-                fig_all.update_layout(yaxis={'categoryorder':'total ascending'}, height=600)
-                st.plotly_chart(fig_all, use_container_width=True)
                 
             with col_dash_right:
                 st.markdown("### 🏆 Top 10 Profesionales")
@@ -590,11 +599,10 @@ def main_app():
                     orientation='h',
                     text="Porcentaje",
                     title="Top 10 Rendimiento",
-                    color="Servicios",
-                    color_continuous_scale="Magma"
+                    color="Profesional", # Color distinto para cada uno
                 )
                 fig_top.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-                fig_top.update_layout(height=600)
+                fig_top.update_layout(height=600, showlegend=False)
                 st.plotly_chart(fig_top, use_container_width=True)
     
     # TAB 4: CUMPLIMIENTO
