@@ -477,7 +477,7 @@ def login():
             submit = st.form_submit_button("Acceder")
             
             if submit:
-                if user in ["admin", "cristian"] and password == "123":
+                if user in ["admin", "cristian", "alejandra"] and password == "123":
                     st.session_state.usuario = user
                     st.rerun()
                 else:
@@ -1032,3 +1032,4 @@ if st.session_state.usuario:
     main_app()
 else:
     login()
+
