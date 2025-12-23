@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 import glob
 import time
+import io
 
 # ===================== CONFIGURACIÓN DE PÁGINA =====================
 st.set_page_config(
@@ -123,10 +124,71 @@ def guardar_fecha_actualizacion():
     return now
 
 def cargar_fecha_actualizacion():
-    if os.path.exists(ARCHIVO_FECHA):
+    if os.path.exists("archivo_consolidado.xlsx"):
+        # Obtener fecha de modificación del archivo real
+        timestamp = os.path.getmtime("archivo_consolidado.xlsx")
+        return datetime.fromtimestamp(timestamp).strftime("%d/%m/%Y %I:%M:%S %p")
+    elif os.path.exists(ARCHIVO_FECHA):
         with open(ARCHIVO_FECHA, "r") as f:
             return f.read().strip()
     return "Sin actualizaciones"
+
+def generar_excel_filtros(df, nombre_prof, fecha_inicio, fecha_fin, procedimiento, ciudad):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        # HOJA 1: DATOS FILTRADOS (RAW)
+        df.to_excel(writer, sheet_name='Datos Filtrados', index=False)
+        
+        # HOJA 2: RESUMEN PROFESIONAL
+        if not df.empty:
+            col_profesional = next((c for c in df.columns if "profesional" in str(c).lower()), None)
+            col_procedimiento = next((c for c in df.columns if "nombre procedimiento" in str(c).lower()), None)
+            col_valor = next((c for c in df.columns if "valor" in str(c).lower()), None)
+            
+            if col_profesional and col_procedimiento and col_valor:
+                try:
+                    temp = df.copy()
+                    temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0)
+                    agrupado = temp.groupby([col_profesional, col_procedimiento]).agg(
+                        Total_Servicios=(col_procedimiento, 'count'),
+                        Valor_Total=('_valor', 'sum')
+                    ).reset_index()
+                    agrupado.to_excel(writer, sheet_name='Resumen Profesional', index=False)
+                except:
+                    pass
+
+        # HOJA 3: RESUMEN PACIENTE
+        if not df.empty:
+            col_paciente = next((c for c in df.columns if "paciente" in str(c).lower()), None)
+            if col_paciente and col_procedimiento:
+                try:
+                    temp = df.copy()
+                    pivot = temp.pivot_table(index=col_paciente, columns=col_procedimiento, aggfunc='size', fill_value=0)
+                    pivot.to_excel(writer, sheet_name='Resumen Paciente')
+                except:
+                    pass
+        
+        # HOJA 4: TOTALES
+        if not df.empty and col_procedimiento and col_valor:
+             try:
+                temp = df.copy()
+                temp["_val"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0)
+                agrupado_total = temp.groupby(col_procedimiento)["_val"].sum().reset_index()
+                agrupado_total.to_excel(writer, sheet_name='Totales', index=False)
+             except:
+                pass
+
+        # HOJA 5: DASHBOARD
+        if not df.empty and col_profesional:
+             try:
+                counts = df[col_profesional].value_counts().reset_index()
+                counts.columns = ["Profesional", "Servicios"]
+                counts.to_excel(writer, sheet_name='Dashboard', index=False)
+             except:
+                pass
+                
+    output.seek(0)
+    return output
 
 def guardar_excel(df, nombre_archivo="base_guardada.xlsx"):
     df.to_excel(nombre_archivo, index=False)
@@ -447,14 +509,6 @@ def main_app():
     
     st.markdown("---")
     
-    # --- INFO ESTADO ---
-    fecha_update = cargar_fecha_actualizacion()
-    st.info(f"🕒 Última actualización: {fecha_update}")
-    
-    if os.path.exists("archivo_consolidado.xlsx"):
-        with open("archivo_consolidado.xlsx", "rb") as f:
-            st.download_button("📥 Descargar Consolidado", f, file_name="archivo_consolidado.xlsx")
-
     # --- CARGAR DATOS EN MEMORIA ---
     if 'df' not in st.session_state or st.session_state.df is None:
         st.session_state.df = cargar_excel()
@@ -576,7 +630,7 @@ def main_app():
                  st.warning("No hay datos cargados. Contacte al administrador.")
         return
 
-    # --- FILTROS ---
+    # --- FILTROS (Mover arriba para tener df_filtrado disponible para descarga) ---
     st.sidebar.header("🔍 Filtros de Análisis")
     
     profs = get_dropdown_options(df, ["profesional"])
@@ -604,6 +658,20 @@ def main_app():
     
     if aviso:
         st.sidebar.warning(aviso)
+
+    # --- INFO ESTADO Y DESCARGAS ---
+    fecha_update = cargar_fecha_actualizacion()
+    st.info(f"🕒 Última actualización: {fecha_update} | 📦 Consolidado")
+    
+    col_dl1, col_dl2 = st.columns([1, 1])
+    with col_dl1:
+        if os.path.exists("archivo_consolidado.xlsx"):
+            with open("archivo_consolidado.xlsx", "rb") as f:
+                st.download_button("📥 Descargar Consolidado", f, file_name="archivo_consolidado.xlsx", use_container_width=True)
+    with col_dl2:
+        if not df_filtrado.empty:
+            excel_data = generar_excel_filtros(df_filtrado, prof_arg, f_ini, f_fin, proc_arg, ciud_arg)
+            st.download_button("📊 Descargar Filtros", excel_data, file_name="reporte_filtrado.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
     # TAB 1: ANÁLISIS
     with tab1:
@@ -802,4 +870,3 @@ if st.session_state.usuario:
     main_app()
 else:
     login()
-
