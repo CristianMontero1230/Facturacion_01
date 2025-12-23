@@ -16,6 +16,70 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ===================== ESTILOS CSS =====================
+def load_css():
+    st.markdown("""
+    <style>
+    /* Estilo General de Botones */
+    div.stButton > button {
+        background-color: #005f73;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        font-weight: bold;
+    }
+    div.stButton > button:hover {
+        background-color: #0a9396;
+        color: white;
+        border-color: #0a9396;
+    }
+    div.stButton > button:active {
+        background-color: #94d2bd;
+        color: #005f73;
+    }
+    
+    /* Inputs */
+    .stTextInput > div > div > input {
+        border-radius: 8px;
+        border: 1px solid #94d2bd;
+    }
+    
+    /* Login Box */
+    .login-box {
+        background-color: #e0fbfc;
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.1);
+        text-align: center;
+        margin-bottom: 20px;
+        border: 2px solid #94d2bd;
+    }
+    
+    /* Header User Box */
+    .user-box {
+        background-color: #e0fbfc;
+        padding: 10px 20px;
+        border-radius: 12px;
+        text-align: center;
+        border: 1px solid #94d2bd;
+        color: #005f73;
+        font-weight: bold;
+        display: inline-block;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+def load_login_css():
+    st.markdown("""
+    <style>
+    div.stButton > button {
+        width: 100%;
+        padding: 10px;
+        font-size: 16px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # ===================== FORMATOS =====================
 def formato_pesos(x):
     try:
@@ -75,7 +139,7 @@ def cargar_excel(nombre_archivo="base_guardada.xlsx"):
             return None
     return None
 
-# ===================== LÓGICA DE NEGOCIO (MIGRADA) =====================
+# ===================== LÓGICA DE NEGOCIO =====================
 def find_col(df, candidates):
     for col in df.columns:
         if any(cand.lower() in str(col).lower() for cand in candidates):
@@ -83,9 +147,6 @@ def find_col(df, candidates):
     return None
 
 def leer_excel(file_obj1, file_obj2=None):
-    # En Streamlit, file_obj1 y file_obj2 son objetos UploadedFile
-    
-    # Si no se sube nada, intentar cargar de memoria o disco
     if file_obj1 is None and file_obj2 is None:
         if 'df' in st.session_state and st.session_state.df is not None:
             return st.session_state.df
@@ -101,12 +162,12 @@ def leer_excel(file_obj1, file_obj2=None):
         if file_obj2 is not None:
             df2 = pd.read_excel(file_obj2, engine="openpyxl")
 
-        # --- LIMPIEZA PRELIMINAR DE PROFESIONAL EN DF1 ---
+        # Limpieza preliminar
         col_prof1 = find_col(df1, ["profesional", "nombre profesional"])
         if col_prof1:
              df1[col_prof1] = df1[col_prof1].astype(str).str.replace(r'^\d+\s*[-]?\s*', '', regex=True).str.strip()
 
-        # Lógica de unión / consolidación
+        # Consolidación
         if not df1.empty and not df2.empty:
             col_code1 = find_col(df1, ["codigo procedimiento", "cod procedimiento", "codigo", "cups"])
             col_code2 = find_col(df2, ["codigo procedimiento", "cod procedimiento", "codigo", "cups"])
@@ -169,9 +230,8 @@ def leer_excel(file_obj1, file_obj2=None):
                 
                 df = df1
             
-                # --- LIMPIEZA Y GUARDADO SEGURO DEL CONSOLIDADO ---
+                # Guardado seguro
                 try:
-                    # Limpieza de archivos antiguos
                     consolidados_viejos = glob.glob("archivo_consolidado*.xlsx")
                     for f_old in consolidados_viejos:
                         try:
@@ -190,9 +250,7 @@ def leer_excel(file_obj1, file_obj2=None):
                         col_lower = col.lower()
                         if "fecha" in col_lower or "inicio" in col_lower or "fin" in col_lower or pd.api.types.is_datetime64_any_dtype(df_export[col]):
                             try:
-                                # Convertir a datetime real
                                 df_export[col] = pd.to_datetime(df_export[col], errors='coerce', dayfirst=True, format='mixed')
-                                # NO convertir a string (strftime) para mantener funcionalidad de filtro de fecha en Excel
                             except:
                                 pass
                         elif "profesional" in col_lower:
@@ -216,7 +274,6 @@ def leer_excel(file_obj1, file_obj2=None):
                             output_path = f"archivo_consolidado_{int(datetime.now().timestamp())}.xlsx"
 
                     try:
-                        # Usar xlsxwriter con formato de fecha explícito
                         with pd.ExcelWriter(output_path, engine='xlsxwriter', engine_kwargs={'options': {'nan_inf_to_errors': True}}, date_format='dd/mm/yyyy', datetime_format='dd/mm/yyyy') as writer:
                              df_export.to_excel(writer, index=False)
                     except:
@@ -281,7 +338,7 @@ def filtrar_datos(df, nombre_prof, fecha_inicio, fecha_fin, procedimiento, ciuda
     if procedimiento and col_procedimiento:
         df_filtrado = df_filtrado[df_filtrado[col_procedimiento].astype(str).str.strip().str.lower() == str(procedimiento).strip().lower()]
     
-    # Filtro Ciudad (Prioridad: Ciudad/Municipio > Sede)
+    # Filtro Ciudad
     col_ciudad = next((c for c in df.columns if "ciudad" in str(c).lower() or "municipio" in str(c).lower()), None)
     if not col_ciudad:
         col_ciudad = next((c for c in df.columns if "sede" in str(c).lower()), None)
@@ -323,40 +380,23 @@ if 'usuario' not in st.session_state:
     st.session_state.usuario = None
 
 def login():
-    st.markdown("""
-    <style>
-    .stButton>button {
-        width: 100%;
-        background-color: #005f73;
-        color: white;
-        border-radius: 10px;
-    }
-    .stTextInput>div>div>input {
-        border-radius: 10px;
-    }
-    .login-box {
-        background-color: #e0fbfc;
-        padding: 30px;
-        border-radius: 20px;
-        box-shadow: 0px 4px 12px rgba(0,0,0,0.1);
-        text-align: center;
-        margin-bottom: 20px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    load_css()
+    load_login_css()
     
     st.markdown("""
     <div class='login-box'>
         <h1 style='color:#005f73; margin:0;'>🏥 IPS GOLEMAN</h1>
-        <p style='color:#555;'>Sistema de Facturación y Análisis</p>
+        <p style='color:#555; font-size:1.1em;'>Sistema de Facturación y Análisis</p>
     </div>
     """, unsafe_allow_html=True)
     
     col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
     with col_l2:
         with st.form("login_form"):
+            st.markdown("<h3 style='text-align:center; color:#005f73;'>Iniciar Sesión</h3>", unsafe_allow_html=True)
             user = st.text_input("Usuario")
             password = st.text_input("Contraseña", type="password")
+            st.markdown("<br>", unsafe_allow_html=True)
             submit = st.form_submit_button("Acceder")
             
             if submit:
@@ -386,20 +426,23 @@ def eliminar_consolidado():
 
 # ===================== APP PRINCIPAL =====================
 def main_app():
+    load_css()
+    
     # --- HEADER ---
     col1, col2, col3, col4 = st.columns([2, 4, 2, 2])
     with col1:
         st.markdown(f"""
-        <div style='background-color:#e0fbfc; padding:10px; border-radius:10px; text-align:center;'>
-            <span style='color:#005f73; font-weight:bold;'>� {st.session_state.usuario}</span>
+        <div class='user-box'>
+            👤 {st.session_state.usuario}
         </div>
         """, unsafe_allow_html=True)
     
     with col3:
-        pass # Botón eliminado del header
+        pass 
                  
     with col4:
-        if st.button("🔒 Cerrar sesión", type="secondary"):
+        # Botón de cerrar sesión con estilo
+        if st.button("🔒 Cerrar sesión"):
             logout()
     
     st.markdown("---")
@@ -415,7 +458,6 @@ def main_app():
     # --- CARGAR DATOS EN MEMORIA ---
     if 'df' not in st.session_state or st.session_state.df is None:
         st.session_state.df = cargar_excel()
-        # Intentar cargar consolidado si existe para el filtro de ciudad
         if os.path.exists("archivo_consolidado.xlsx"):
              try:
                  st.session_state.df_ciudades = pd.read_excel("archivo_consolidado.xlsx", engine="openpyxl")
@@ -426,45 +468,7 @@ def main_app():
 
     df = st.session_state.df
     
-    if df is None:
-        st.warning("No hay datos cargados. Por favor suba un archivo.")
-        return
-
-    # --- FILTROS ---
-    st.sidebar.header("🔍 Filtros de Análisis")
-    
-    # Opciones
-    profs = get_dropdown_options(df, ["profesional"])
-    procs = get_dropdown_options(df, ["nombre procedimiento"])
-    # Para ciudades, usar consolidado si está disponible
-    ciudades_df = st.session_state.get('df_ciudades', df)
-    # Prioridad: Ciudad/Municipio > Sede
-    ciuds = get_dropdown_options(ciudades_df, ["ciudad", "municipio"])
-    if not ciuds:
-         ciuds = get_dropdown_options(ciudades_df, ["sede"])
-    
-    sel_prof = st.sidebar.selectbox("Profesional", ["Todos"] + profs)
-    sel_proc = st.sidebar.selectbox("Procedimiento", ["Todos"] + procs)
-    sel_ciud = st.sidebar.selectbox("Ciudad / Municipio", ["Todos"] + ciuds)
-    
-    col_d1, col_d2 = st.sidebar.columns(2)
-    with col_d1:
-        f_ini = st.date_input("Fecha Inicio", value=None)
-    with col_d2:
-        f_fin = st.date_input("Fecha Fin", value=None)
-    
-    # Aplicar filtros
-    prof_arg = sel_prof if sel_prof != "Todos" else None
-    proc_arg = sel_proc if sel_proc != "Todos" else None
-    ciud_arg = sel_ciud if sel_ciud != "Todos" else None
-    
-    df_filtrado, aviso = filtrar_datos(df, prof_arg, f_ini, f_fin, proc_arg, ciud_arg)
-    
-    if aviso:
-        st.sidebar.warning(aviso)
-    
     # --- TABS ---
-    # Definir tabs dinámicamente según rol
     tabs_names = ["📊 ANÁLISIS", "💰 TOTAL", "🏆 DASHBOARD", "✅ CUMPLIMIENTO", "🔄 CRUCES DE DATOS"]
     if st.session_state.usuario == "admin":
         tabs_names.insert(0, "📂 CONSOLIDACIÓN")
@@ -500,14 +504,107 @@ def main_app():
             col_act1, col_act2 = st.columns(2)
             with col_act1:
                 if archivo1:
-                    if st.button("🔄 Procesar y Consolidar Archivos", type="primary"):
+                    if st.button("🔄 Procesar y Consolidar Archivos"):
                         leer_excel(archivo1, archivo2)
                         st.rerun()
             with col_act2:
-                if os.path.exists("archivo_consolidado.xlsx"):
-                     if st.button("🗑️ Eliminar Consolidado Totalmente", type="secondary"):
+                if os.path.exists("archivo_consolidado.xlsx") or os.path.exists("base_guardada.xlsx"):
+                     if st.button("🗑️ Eliminar Consolidado Totalmente"):
                          eliminar_consolidado()
+    
+    # TAB CRUCES DE DATOS
+    with tab_cruces:
+        st.subheader("🔄 Cruce de Información")
+        st.markdown("Suba dos archivos para comparar registros y encontrar coincidencias o diferencias.")
+        
+        col_cruce1, col_cruce2 = st.columns(2)
+        with col_cruce1:
+            file_cruce1 = st.file_uploader("Archivo A (Base)", type=["xlsx"], key="cruce1")
+        with col_cruce2:
+            file_cruce2 = st.file_uploader("Archivo B (Comparar)", type=["xlsx"], key="cruce2")
             
+        if file_cruce1 and file_cruce2:
+            if st.button("🔍 Comparar Archivos"):
+                try:
+                    df_c1 = pd.read_excel(file_cruce1, engine="openpyxl")
+                    df_c2 = pd.read_excel(file_cruce2, engine="openpyxl")
+                    
+                    st.success(f"Archivos cargados: {df_c1.shape[0]} filas en A, {df_c2.shape[0]} filas en B")
+                    
+                    common_cols = list(set(df_c1.columns) & set(df_c2.columns))
+                    
+                    if common_cols:
+                        col_key = st.selectbox("Seleccione columna clave para cruzar (ej: Cédula, Código)", common_cols)
+                        
+                        df_c1[col_key] = df_c1[col_key].astype(str).str.strip()
+                        df_c2[col_key] = df_c2[col_key].astype(str).str.strip()
+                        
+                        coincidencias = pd.merge(df_c1, df_c2, on=col_key, how='inner', suffixes=('_A', '_B'))
+                        no_en_b = df_c1[~df_c1[col_key].isin(df_c2[col_key])]
+                        no_en_a = df_c2[~df_c2[col_key].isin(df_c1[col_key])]
+                        
+                        st.divider()
+                        
+                        col_res1, col_res2, col_res3 = st.columns(3)
+                        with col_res1:
+                            st.metric("Coincidencias", len(coincidencias))
+                        with col_res2:
+                            st.metric("Solo en Archivo A", len(no_en_b))
+                        with col_res3:
+                            st.metric("Solo en Archivo B", len(no_en_a))
+                            
+                        tab_res1, tab_res2, tab_res3 = st.tabs(["✅ Coincidencias", "⚠️ Solo en A", "⚠️ Solo en B"])
+                        
+                        with tab_res1:
+                            st.dataframe(coincidencias, use_container_width=True)
+                        with tab_res2:
+                            st.dataframe(no_en_b, use_container_width=True)
+                        with tab_res3:
+                            st.dataframe(no_en_a, use_container_width=True)
+                            
+                    else:
+                        st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
+                        
+                except Exception as e:
+                    st.error(f"Error en el cruce: {e}")
+
+    if df is None:
+        with tab1:
+            if st.session_state.usuario == "admin":
+                 st.warning("No hay datos cargados. Por favor suba un archivo en la pestaña 'CONSOLIDACIÓN'.")
+            else:
+                 st.warning("No hay datos cargados. Contacte al administrador.")
+        return
+
+    # --- FILTROS ---
+    st.sidebar.header("🔍 Filtros de Análisis")
+    
+    profs = get_dropdown_options(df, ["profesional"])
+    procs = get_dropdown_options(df, ["nombre procedimiento"])
+    ciudades_df = st.session_state.get('df_ciudades', df)
+    ciuds = get_dropdown_options(ciudades_df, ["ciudad", "municipio"])
+    if not ciuds:
+         ciuds = get_dropdown_options(ciudades_df, ["sede"])
+    
+    sel_prof = st.sidebar.selectbox("Profesional", ["Todos"] + profs)
+    sel_proc = st.sidebar.selectbox("Procedimiento", ["Todos"] + procs)
+    sel_ciud = st.sidebar.selectbox("Ciudad / Municipio", ["Todos"] + ciuds)
+    
+    col_d1, col_d2 = st.sidebar.columns(2)
+    with col_d1:
+        f_ini = st.date_input("Fecha Inicio", value=None)
+    with col_d2:
+        f_fin = st.date_input("Fecha Fin", value=None)
+    
+    prof_arg = sel_prof if sel_prof != "Todos" else None
+    proc_arg = sel_proc if sel_proc != "Todos" else None
+    ciud_arg = sel_ciud if sel_ciud != "Todos" else None
+    
+    df_filtrado, aviso = filtrar_datos(df, prof_arg, f_ini, f_fin, proc_arg, ciud_arg)
+    
+    if aviso:
+        st.sidebar.warning(aviso)
+
     # TAB 1: ANÁLISIS
     with tab1:
         st.subheader("Resumen Profesional por Procedimiento")
@@ -522,16 +619,13 @@ def main_app():
                     temp = df_filtrado.copy()
                     temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0)
                     
-                    # Agrupar por Profesional y Procedimiento
                     agrupado = temp.groupby([col_profesional, col_procedimiento]).agg(
                         Total_Servicios=(col_procedimiento, 'count'),
                         Valor_Total=('_valor', 'sum')
                     ).reset_index()
                     
-                    # Ordenar y formatear
                     agrupado = agrupado.sort_values([col_profesional, "Total_Servicios"], ascending=[True, False])
                     
-                    # Estilización de dataframe
                     st.dataframe(
                         agrupado, 
                         column_config={
@@ -561,7 +655,6 @@ def main_app():
         st.markdown("---")
         st.subheader("Resumen por Paciente")
         
-        # Lógica de agrupación (simplificada de appy.py)
         if not df_filtrado.empty:
             col_paciente = next((c for c in df_filtrado.columns if "paciente" in str(c).lower()), None)
             col_procedimiento = next((c for c in df_filtrado.columns if "nombre procedimiento" in str(c).lower()), None)
@@ -581,7 +674,6 @@ def main_app():
                     pivot["TOTAL SERVICIOS"] = pivot.sum(axis=1)
                     pivot["VALOR TOTAL"] = temp.groupby(col_paciente)["_valor"].sum()
                     
-                    # Formato
                     pivot["VALOR TOTAL"] = pivot["VALOR TOTAL"].apply(formato_pesos)
                     pivot = pivot.sort_values("TOTAL SERVICIOS", ascending=False)
                     
@@ -597,10 +689,9 @@ def main_app():
     # TAB 2: TOTAL
     with tab2:
         total_val = calcular_totales(df_filtrado)
-        st.markdown(f"<div style='text-align:center; background:#e0fbfc; padding:20px; border-radius:15px;'><h1 style='color:#005f73;'>💰 Total: {formato_pesos(total_val)}</h1></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align:center; background:#e0fbfc; padding:20px; border-radius:15px; border: 1px solid #94d2bd;'><h1 style='color:#005f73;'>💰 Total: {formato_pesos(total_val)}</h1></div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Tabla por procedimiento en lugar de gráfico
         col_proc = next((c for c in df_filtrado.columns if "nombre procedimiento" in str(c).lower()), None)
         col_val = next((c for c in df_filtrado.columns if "valor" in str(c).lower()), None)
         
@@ -611,11 +702,10 @@ def main_app():
             
             st.subheader("Detalle por Procedimiento")
             
-            # Formatear valor para visualización
             agrupado["Valor Formateado"] = agrupado["_val"].apply(formato_pesos)
             
             st.dataframe(
-                agrupado[[col_proc, "Valor Formateado"]], # Mostrar columnas limpias
+                agrupado[[col_proc, "Valor Formateado"]],
                 column_config={
                     col_proc: "Nombre del Procedimiento",
                     "Valor Formateado": st.column_config.TextColumn(
@@ -640,13 +730,11 @@ def main_app():
             counts = df_filtrado[col_prof].value_counts().reset_index()
             counts.columns = ["Profesional", "Servicios"]
             
-            # Calcular porcentajes
             if meta_dash > 0:
                 counts["Porcentaje"] = (counts["Servicios"] / meta_dash * 100)
             else:
                 counts["Porcentaje"] = 0
             
-            # Dividir pantalla
             col_dash_left, col_dash_right = st.columns(2)
             
             with col_dash_left:
@@ -675,7 +763,7 @@ def main_app():
                 
             with col_dash_right:
                 st.markdown("### 🏆 Top 10 Profesionales")
-                top_10 = counts.head(10).sort_values("Servicios", ascending=True) # Sort for chart
+                top_10 = counts.head(10).sort_values("Servicios", ascending=True)
                 fig_top = px.bar(
                     top_10, 
                     x="Servicios", 
@@ -683,7 +771,7 @@ def main_app():
                     orientation='h',
                     text="Porcentaje",
                     title="Top 10 Rendimiento",
-                    color="Profesional", # Color distinto para cada uno
+                    color="Profesional",
                 )
                 fig_top.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
                 fig_top.update_layout(height=600, showlegend=False)
@@ -709,71 +797,9 @@ def main_app():
             fig_pie = px.pie(names=["Logrado", "Faltante"], values=[min(total_actual, meta_cump), max(meta_cump - total_actual, 0)], hole=0.5)
             st.plotly_chart(fig_pie)
 
-    # TAB 5: CRUCES DE DATOS
-    with tab_cruces:
-        st.subheader("🔄 Cruce de Información")
-        st.markdown("Suba dos archivos para comparar registros y encontrar coincidencias o diferencias.")
-        
-        col_cruce1, col_cruce2 = st.columns(2)
-        with col_cruce1:
-            file_cruce1 = st.file_uploader("Archivo A (Base)", type=["xlsx"], key="cruce1")
-        with col_cruce2:
-            file_cruce2 = st.file_uploader("Archivo B (Comparar)", type=["xlsx"], key="cruce2")
-            
-        if file_cruce1 and file_cruce2:
-            if st.button("🔍 Comparar Archivos", type="primary"):
-                try:
-                    df_c1 = pd.read_excel(file_cruce1, engine="openpyxl")
-                    df_c2 = pd.read_excel(file_cruce2, engine="openpyxl")
-                    
-                    st.success(f"Archivos cargados: {df_c1.shape[0]} filas en A, {df_c2.shape[0]} filas en B")
-                    
-                    # Identificar columnas comunes
-                    common_cols = list(set(df_c1.columns) & set(df_c2.columns))
-                    
-                    if common_cols:
-                        col_key = st.selectbox("Seleccione columna clave para cruzar (ej: Cédula, Código)", common_cols)
-                        
-                        # Realizar cruce
-                        df_c1[col_key] = df_c1[col_key].astype(str).str.strip()
-                        df_c2[col_key] = df_c2[col_key].astype(str).str.strip()
-                        
-                        # Coincidencias
-                        coincidencias = pd.merge(df_c1, df_c2, on=col_key, how='inner', suffixes=('_A', '_B'))
-                        
-                        # Diferencias (En A pero no en B)
-                        no_en_b = df_c1[~df_c1[col_key].isin(df_c2[col_key])]
-                        
-                        # Diferencias (En B pero no en A)
-                        no_en_a = df_c2[~df_c2[col_key].isin(df_c1[col_key])]
-                        
-                        st.divider()
-                        
-                        col_res1, col_res2, col_res3 = st.columns(3)
-                        with col_res1:
-                            st.metric("Coincidencias", len(coincidencias))
-                        with col_res2:
-                            st.metric("Solo en Archivo A", len(no_en_b))
-                        with col_res3:
-                            st.metric("Solo en Archivo B", len(no_en_a))
-                            
-                        tab_res1, tab_res2, tab_res3 = st.tabs(["✅ Coincidencias", "⚠️ Solo en A", "⚠️ Solo en B"])
-                        
-                        with tab_res1:
-                            st.dataframe(coincidencias, use_container_width=True)
-                        with tab_res2:
-                            st.dataframe(no_en_b, use_container_width=True)
-                        with tab_res3:
-                            st.dataframe(no_en_a, use_container_width=True)
-                            
-                    else:
-                        st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
-                        
-                except Exception as e:
-                    st.error(f"Error en el cruce: {e}")
-
 # ===================== MAIN EXECUTION =====================
 if st.session_state.usuario:
     main_app()
 else:
     login()
+
