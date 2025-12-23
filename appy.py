@@ -476,8 +476,9 @@ def calcular_totales(df):
     return 0
 
 # ===================== UI LOGIN =====================
-if 'usuario' not in st.session_state:
-    st.session_state.usuario = None
+# REMOVED GLOBAL SESSION STATE INIT to avoid top-level execution risks
+# if 'usuario' not in st.session_state:
+#     st.session_state.usuario = None
 
 def login():
     load_css()
@@ -1071,4 +1072,3 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
-
