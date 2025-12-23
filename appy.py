@@ -1057,12 +1057,18 @@ def main_app():
 
 # ===================== MAIN EXECUTION =====================
 if __name__ == "__main__":
+    # Asegurar inicialización de estado
+    if 'usuario' not in st.session_state:
+        st.session_state.usuario = None
+
     try:
         if st.session_state.usuario:
             main_app()
         else:
             login()
     except Exception as e:
-        st.error(f"Ocurrió un error inesperado en la aplicación: {e}")
-        st.warning("Por favor intente recargar la página o contacte al administrador.")
+        st.error(f"Ocurrió un error crítico: {e}")
+        # Intentar mostrar detalles si es posible
+        import traceback
+        st.code(traceback.format_exc())
 
