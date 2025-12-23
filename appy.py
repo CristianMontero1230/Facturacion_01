@@ -67,13 +67,20 @@ def load_css():
         border: 1px solid #94d2bd;
         color: #005f73;
         font-weight: bold;
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
     }
     
     /* Hover Row Effect (Solo afecta tablas HTML standard, no st.dataframe canvas) */
     tr:hover {
         background-color: #d0f0c0 !important;
         cursor: pointer;
+    }
+    
+    /* Background Color Main App */
+    .stApp {
+        background-color: #f0f8ff; /* Azul claro muy suave */
     }
     </style>
     """, unsafe_allow_html=True)
@@ -531,6 +538,7 @@ def main_app():
     with col1:
         st.markdown(f"""
         <div class='user-box'>
+            <span style='height: 12px; width: 12px; background-color: #2ec4b6; border-radius: 50%; display: inline-block;'></span>
             👤 {st.session_state.usuario}
         </div>
         """, unsafe_allow_html=True)
@@ -765,7 +773,7 @@ def main_app():
                 st.warning("No se encontraron columnas de profesional, procedimiento o valor para generar el resumen.")
 
         st.markdown("---")
-        st.subheader("Resumen por Paciente")
+        st.subheader("Resumen Detallado por Paciente")
         
         if not df_filtrado.empty:
             col_paciente = next((c for c in df_filtrado.columns if "paciente" in str(c).lower()), None)
@@ -777,19 +785,49 @@ def main_app():
                     temp = df_filtrado.copy()
                     temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0) if col_valor else 0
                     
-                    pivot = temp.pivot_table(
-                        index=col_paciente,
-                        columns=col_procedimiento,
-                        aggfunc='size',
-                        fill_value=0
+                    # Agrupación por Paciente
+                    resumen_paciente = temp.groupby(col_paciente).agg(
+                        Total_Procedimientos=(col_procedimiento, 'count'),
+                        Tipos_Procedimientos=(col_procedimiento, lambda x: len(set(x))),
+                        Valor_Total=('_valor', 'sum')
+                    ).reset_index()
+                    
+                    resumen_paciente = resumen_paciente.sort_values("Total_Procedimientos", ascending=False)
+                    
+                    # Formateo visual
+                    st.dataframe(
+                        resumen_paciente,
+                        column_config={
+                            col_paciente: "Nombre del Paciente",
+                            "Total_Procedimientos": st.column_config.NumberColumn(
+                                "Total Procedimientos",
+                                help="Cantidad total de procedimientos realizados a este paciente",
+                                format="%d 🏥"
+                            ),
+                            "Tipos_Procedimientos": st.column_config.NumberColumn(
+                                "Tipos Únicos",
+                                help="Cantidad de tipos de procedimientos diferentes",
+                                format="%d"
+                            ),
+                            "Valor_Total": st.column_config.NumberColumn(
+                                "Valor Facturado",
+                                format="$ %d",
+                            )
+                        },
+                        hide_index=True,
+                        use_container_width=True,
+                        height=500
                     )
-                    pivot["TOTAL SERVICIOS"] = pivot.sum(axis=1)
-                    pivot["VALOR TOTAL"] = temp.groupby(col_paciente)["_valor"].sum()
                     
-                    pivot["VALOR TOTAL"] = pivot["VALOR TOTAL"].apply(formato_pesos)
-                    pivot = pivot.sort_values("TOTAL SERVICIOS", ascending=False)
-                    
-                    st.dataframe(pivot, use_container_width=True)
+                    with st.expander("Ver Detalle Matricial (Tabla Cruzada)"):
+                        pivot = temp.pivot_table(
+                            index=col_paciente,
+                            columns=col_procedimiento,
+                            aggfunc='size',
+                            fill_value=0
+                        )
+                        st.dataframe(pivot, use_container_width=True)
+
                 except Exception as e:
                     st.error(f"Error agrupando: {e}")
                     st.dataframe(df_filtrado)
