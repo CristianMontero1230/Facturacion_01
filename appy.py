@@ -734,11 +734,11 @@ def main_app():
                         tab_res1, tab_res2, tab_res3 = st.tabs(["✅ Coincidencias", "⚠️ Solo en A", "⚠️ Solo en B"])
                         
                         with tab_res1:
-                            st.dataframe(clean_df_for_st(coincidencias), use_container_width=True)
+                            st.dataframe(coincidencias)
                         with tab_res2:
-                            st.dataframe(clean_df_for_st(no_en_b), use_container_width=True)
+                            st.dataframe(no_en_b)
                         with tab_res3:
-                            st.dataframe(clean_df_for_st(no_en_a), use_container_width=True)
+                            st.dataframe(no_en_a)
                         
                     else:
                         st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
