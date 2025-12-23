@@ -579,15 +579,20 @@ def main_app():
     
     # --- CARGAR DATOS EN MEMORIA ---
     if 'df' not in st.session_state or st.session_state.df is None:
-        st.session_state.df = cargar_excel()
-        if os.path.exists("archivo_consolidado.xlsx"):
-             try:
-                 df_c = pd.read_excel("archivo_consolidado.xlsx", engine="openpyxl")
-                 st.session_state.df_ciudades = clean_df_for_st(df_c)
-             except:
+        try:
+            st.session_state.df = cargar_excel()
+            if os.path.exists("archivo_consolidado.xlsx"):
+                 try:
+                     df_c = pd.read_excel("archivo_consolidado.xlsx", engine="openpyxl")
+                     st.session_state.df_ciudades = clean_df_for_st(df_c)
+                 except:
+                     st.session_state.df_ciudades = st.session_state.df
+            else:
                  st.session_state.df_ciudades = st.session_state.df
-        else:
-             st.session_state.df_ciudades = st.session_state.df
+        except Exception as e:
+            st.error(f"Error cargando datos iniciales: {e}")
+            st.session_state.df = None
+            st.session_state.df_ciudades = None
 
     df = st.session_state.df
 
@@ -1072,3 +1077,4 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
+
