@@ -211,12 +211,33 @@ def guardar_excel(df, nombre_archivo="base_guardada.xlsx"):
 def cargar_excel(nombre_archivo="base_guardada.xlsx"):
     if os.path.exists(nombre_archivo):
         try:
-            return pd.read_excel(nombre_archivo)
+            df = pd.read_excel(nombre_archivo)
+            return clean_df_for_st(df)
         except:
             return None
     return None
 
 # ===================== LÓGICA DE NEGOCIO =====================
+def clean_df_for_st(df):
+    """Limpia el DataFrame para evitar errores de PyArrow en Streamlit"""
+    if df is None or df.empty:
+        return df
+    
+    df = df.copy()
+    
+    # 1. Eliminar columnas Unnamed
+    df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+    
+    # 2. Homogeneizar tipos de datos para evitar Mixed Types
+    for col in df.columns:
+        # Si es tipo objeto, forzar a string y limpiar caracteres raros
+        if df[col].dtype == 'object':
+            df[col] = df[col].astype(str).replace('nan', '')
+            # Eliminar caracteres nulos o de control que rompen Arrow
+            df[col] = df[col].apply(lambda x: re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', '', x) if isinstance(x, str) else x)
+    
+    return df
+
 def find_col(df, candidates):
     for col in df.columns:
         if any(cand.lower() in str(col).lower() for cand in candidates):
@@ -560,7 +581,8 @@ def main_app():
         st.session_state.df = cargar_excel()
         if os.path.exists("archivo_consolidado.xlsx"):
              try:
-                 st.session_state.df_ciudades = pd.read_excel("archivo_consolidado.xlsx", engine="openpyxl")
+                 df_c = pd.read_excel("archivo_consolidado.xlsx", engine="openpyxl")
+                 st.session_state.df_ciudades = clean_df_for_st(df_c)
              except:
                  st.session_state.df_ciudades = st.session_state.df
         else:
@@ -711,11 +733,11 @@ def main_app():
                         tab_res1, tab_res2, tab_res3 = st.tabs(["✅ Coincidencias", "⚠️ Solo en A", "⚠️ Solo en B"])
                         
                         with tab_res1:
-                            st.dataframe(coincidencias, use_container_width=True)
+                            st.dataframe(clean_df_for_st(coincidencias), use_container_width=True)
                         with tab_res2:
-                            st.dataframe(no_en_b, use_container_width=True)
+                            st.dataframe(clean_df_for_st(no_en_b), use_container_width=True)
                         with tab_res3:
-                            st.dataframe(no_en_a, use_container_width=True)
+                            st.dataframe(clean_df_for_st(no_en_a), use_container_width=True)
                         
                     else:
                         st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
@@ -829,6 +851,7 @@ def main_app():
                             aggfunc='size',
                             fill_value=0
                         )
+                        pivot = clean_df_for_st(pivot)
                         st.dataframe(pivot, use_container_width=True)
 
                 except Exception as e:
@@ -866,6 +889,8 @@ def main_app():
             
             # Formatear Valor (String con puntos)
             agrupado["Valor Total"] = agrupado["Valor_Num"].apply(formato_pesos)
+            
+            agrupado = clean_df_for_st(agrupado)
             
             st.subheader("Detalle por Procedimiento")
             
