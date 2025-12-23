@@ -323,50 +323,86 @@ if 'usuario' not in st.session_state:
     st.session_state.usuario = None
 
 def login():
-    st.markdown("<h1 style='text-align:center; color:#005f73;'>IPS GOLEMAN - Login</h1>", unsafe_allow_html=True)
-    with st.form("login_form"):
-        user = st.text_input("Usuario")
-        password = st.text_input("Contraseña", type="password")
-        submit = st.form_submit_button("Acceder")
-        
-        if submit:
-            if user in ["admin", "cristian"] and password == "123":
-                st.session_state.usuario = user
-                st.rerun()
-            else:
-                st.error("❌ Usuario o contraseña incorrectos")
+    st.markdown("""
+    <style>
+    .stButton>button {
+        width: 100%;
+        background-color: #005f73;
+        color: white;
+        border-radius: 10px;
+    }
+    .stTextInput>div>div>input {
+        border-radius: 10px;
+    }
+    .login-box {
+        background-color: #e0fbfc;
+        padding: 30px;
+        border-radius: 20px;
+        box-shadow: 0px 4px 12px rgba(0,0,0,0.1);
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class='login-box'>
+        <h1 style='color:#005f73; margin:0;'>🏥 IPS GOLEMAN</h1>
+        <p style='color:#555;'>Sistema de Facturación y Análisis</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col_l1, col_l2, col_l3 = st.columns([1, 2, 1])
+    with col_l2:
+        with st.form("login_form"):
+            user = st.text_input("Usuario")
+            password = st.text_input("Contraseña", type="password")
+            submit = st.form_submit_button("Acceder")
+            
+            if submit:
+                if user in ["admin", "cristian"] and password == "123":
+                    st.session_state.usuario = user
+                    st.rerun()
+                else:
+                    st.error("❌ Usuario o contraseña incorrectos")
 
 def logout():
     st.session_state.usuario = None
     st.rerun()
 
+def eliminar_consolidado():
+    try:
+        if os.path.exists("archivo_consolidado.xlsx"):
+            os.remove("archivo_consolidado.xlsx")
+        st.session_state.df = None
+        st.session_state.df_ciudades = None
+        st.success("✅ Consolidado eliminado y datos reiniciados.")
+        time.sleep(1)
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error al eliminar: {e}")
+
 # ===================== APP PRINCIPAL =====================
 def main_app():
     # --- HEADER ---
-    col1, col2, col3 = st.columns([2, 6, 2])
+    col1, col2, col3, col4 = st.columns([2, 4, 2, 2])
     with col1:
-        st.markdown(f"**👤 Usuario:** {st.session_state.usuario}")
+        st.markdown(f"""
+        <div style='background-color:#e0fbfc; padding:10px; border-radius:10px; text-align:center;'>
+            <span style='color:#005f73; font-weight:bold;'>� {st.session_state.usuario}</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with col3:
-        if st.button("🔒 Cerrar sesión"):
+        if st.session_state.usuario == "admin" and os.path.exists("archivo_consolidado.xlsx"):
+             if st.button("🗑️ Eliminar Consolidado", type="primary"):
+                 eliminar_consolidado()
+                 
+    with col4:
+        if st.button("🔒 Cerrar sesión", type="secondary"):
             logout()
     
     st.markdown("---")
-    
-    # --- CARGA DE ARCHIVOS ---
-    is_admin = (st.session_state.usuario == "admin")
-    
-    if is_admin:
-        st.subheader("📂 Carga de Archivos")
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            archivo1 = st.file_uploader("Archivo 1 (.xlsx)", type=["xlsx"])
-        with col_f2:
-            archivo2 = st.file_uploader("Archivo 2 (.xlsx) [Opcional]", type=["xlsx"])
-        
-        if archivo1:
-            if st.button("Procesar y Consolidar"):
-                leer_excel(archivo1, archivo2)
-                st.rerun()
     
     # --- INFO ESTADO ---
     fecha_update = cargar_fecha_actualizacion()
@@ -428,8 +464,26 @@ def main_app():
         st.sidebar.warning(aviso)
     
     # --- TABS ---
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 ANÁLISIS", "💰 TOTAL", "🏆 DASHBOARD", "✅ CUMPLIMIENTO"])
+    tab_consol, tab1, tab2, tab3, tab4 = st.tabs(["� CONSOLIDACIÓN", "� ANÁLISIS", "💰 TOTAL", "🏆 DASHBOARD", "✅ CUMPLIMIENTO"])
     
+    # TAB CONSOLIDACIÓN (Solo Admin)
+    with tab_consol:
+        st.subheader("Gestión de Archivos")
+        if st.session_state.usuario == "admin":
+            st.markdown("Cargue los archivos para consolidar o actualizar la base de datos.")
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                archivo1 = st.file_uploader("Archivo 1 (Base Principal)", type=["xlsx"])
+            with col_f2:
+                archivo2 = st.file_uploader("Archivo 2 (Información Complementaria)", type=["xlsx"])
+            
+            if archivo1:
+                if st.button("🔄 Procesar y Consolidar Archivos", type="primary"):
+                    leer_excel(archivo1, archivo2)
+                    st.rerun()
+        else:
+            st.info("Solo el administrador puede cargar y consolidar archivos.")
+            
     # TAB 1: ANÁLISIS
     with tab1:
         st.subheader("Resumen Profesional por Procedimiento")
@@ -520,8 +574,9 @@ def main_app():
     with tab2:
         total_val = calcular_totales(df_filtrado)
         st.markdown(f"<div style='text-align:center; background:#e0fbfc; padding:20px; border-radius:15px;'><h1 style='color:#005f73;'>💰 Total: {formato_pesos(total_val)}</h1></div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         
-        # Gráfico por procedimiento
+        # Tabla por procedimiento en lugar de gráfico
         col_proc = next((c for c in df_filtrado.columns if "nombre procedimiento" in str(c).lower()), None)
         col_val = next((c for c in df_filtrado.columns if "valor" in str(c).lower()), None)
         
@@ -530,19 +585,21 @@ def main_app():
             temp["_val"] = pd.to_numeric(temp[col_val], errors='coerce').fillna(0)
             agrupado = temp.groupby(col_proc)["_val"].sum().reset_index().sort_values("_val", ascending=False)
             
-            # Gráfico dinámico y colorido
-            fig = px.bar(
-                agrupado, 
-                x=col_proc, 
-                y="_val", 
-                text="_val", 
-                title="Valor por Procedimiento",
-                color=col_proc,  # Colores dinámicos por procedimiento
-                labels={"_val": "Valor Total", col_proc: "Procedimiento"}
+            st.subheader("Detalle por Procedimiento")
+            st.dataframe(
+                agrupado,
+                column_config={
+                    col_proc: "Nombre del Procedimiento",
+                    "_val": st.column_config.NumberColumn(
+                        "Valor Total",
+                        format="$ %d",
+                        help="Valor total facturado por este procedimiento"
+                    )
+                },
+                hide_index=True,
+                use_container_width=True,
+                height=500
             )
-            fig.update_traces(texttemplate="%{text:$,.0f}", textposition="outside")
-            fig.update_layout(showlegend=False) # Ocultar leyenda si hay muchas barras
-            st.plotly_chart(fig, use_container_width=True)
 
     # TAB 3: DASHBOARD
     with tab3:
