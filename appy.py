@@ -329,7 +329,7 @@ def login():
         submit = st.form_submit_button("Acceder")
         
         if submit:
-            if user in ["admin", "cristian","marta","alejandra"] and password == "123":
+            if user in ["admin", "cristian"] and password == "123":
                 st.session_state.usuario = user
                 st.rerun()
             else:
@@ -371,7 +371,7 @@ def main_app():
     fecha_update = cargar_fecha_actualizacion()
     st.info(f"🕒 Última actualización: {fecha_update}")
     
-    if os.path.exists("archivo_consolidado.xlsx") and is_admin:
+    if os.path.exists("archivo_consolidado.xlsx"):
         with open("archivo_consolidado.xlsx", "rb") as f:
             st.download_button("📥 Descargar Consolidado", f, file_name="archivo_consolidado.xlsx")
 
@@ -431,6 +431,35 @@ def main_app():
     
     # TAB 1: ANÁLISIS
     with tab1:
+        st.subheader("Resumen Profesional por Procedimiento")
+        
+        if not df_filtrado.empty:
+            col_profesional = next((c for c in df_filtrado.columns if "profesional" in str(c).lower()), None)
+            col_procedimiento = next((c for c in df_filtrado.columns if "nombre procedimiento" in str(c).lower()), None)
+            col_valor = next((c for c in df_filtrado.columns if "valor" in str(c).lower()), None)
+
+            if col_profesional and col_procedimiento and col_valor:
+                try:
+                    temp = df_filtrado.copy()
+                    temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0)
+                    
+                    # Agrupar por Profesional y Procedimiento
+                    agrupado = temp.groupby([col_profesional, col_procedimiento]).agg(
+                        Total_Servicios=(col_procedimiento, 'count'),
+                        Valor_Total=('_valor', 'sum')
+                    ).reset_index()
+                    
+                    # Ordenar y formatear
+                    agrupado = agrupado.sort_values([col_profesional, "Total_Servicios"], ascending=[True, False])
+                    agrupado["Valor_Total"] = agrupado["Valor_Total"].apply(formato_pesos)
+                    
+                    st.dataframe(agrupado, use_container_width=True)
+                except Exception as e:
+                    st.error(f"Error generando resumen profesional: {e}")
+            else:
+                st.warning("No se encontraron columnas de profesional, procedimiento o valor para generar el resumen.")
+
+        st.markdown("---")
         st.subheader("Resumen por Paciente")
         
         # Lógica de agrupación (simplificada de appy.py)
