@@ -83,6 +83,12 @@ def load_css():
     .stApp {
         background-color: #f0f8ff; /* Azul claro muy suave */
     }
+    
+    /* Sidebar Background */
+    section[data-testid="stSidebar"] {
+        background-color: #e0fbfc; /* Color suave para el sidebar */
+        border-right: 2px solid #94d2bd;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -140,10 +146,14 @@ def guardar_fecha_actualizacion():
     return now
 
 def cargar_fecha_actualizacion():
-    if os.path.exists("archivo_consolidado.xlsx"):
-        # Obtener fecha de modificación del archivo real
-        timestamp = os.path.getmtime("archivo_consolidado.xlsx")
+    # Buscar el archivo consolidado más reciente
+    archivos = glob.glob("archivo_consolidado*.xlsx")
+    if archivos:
+        # Ordenar por fecha de modificación (el más reciente al final)
+        archivo_reciente = max(archivos, key=os.path.getmtime)
+        timestamp = os.path.getmtime(archivo_reciente)
         return datetime.fromtimestamp(timestamp).strftime("%d/%m/%Y %I:%M:%S %p")
+        
     elif os.path.exists(ARCHIVO_FECHA):
         with open(ARCHIVO_FECHA, "r") as f:
             return f.read().strip()
@@ -513,7 +523,28 @@ def login():
                 else:
                     st.error("❌ Usuario o contraseña incorrectos")
 
+def set_user_offline(username):
+    """Marca a un usuario como desconectado inmediatamente"""
+    try:
+        status_data = {}
+        if os.path.exists(STATUS_FILE):
+            try:
+                with open(STATUS_FILE, "r") as f:
+                    status_data = json.load(f)
+            except:
+                pass
+        
+        # Establecer tiempo en 0 para desconexión inmediata
+        status_data[username] = 0
+        
+        with open(STATUS_FILE, "w") as f:
+            json.dump(status_data, f)
+    except:
+        pass
+
 def logout():
+    if st.session_state.usuario:
+        set_user_offline(st.session_state.usuario)
     st.session_state.usuario = None
     st.rerun()
 
