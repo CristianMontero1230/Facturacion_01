@@ -10,6 +10,7 @@ from datetime import datetime
 import glob
 import time
 import io
+import gc
 
 # ===================== CONFIGURACIÓN DE PÁGINA =====================
 st.set_page_config(
@@ -711,73 +712,142 @@ def main_app():
         with col_cruce2:
             file_cruce2 = st.file_uploader("Archivo B (Comparar)", type=["xlsx"], key="cruce2")
             
+        # Gestión de Estado de Archivos Cargados
+        if 'cruce_df1' not in st.session_state:
+            st.session_state.cruce_df1 = None
+        if 'cruce_df2' not in st.session_state:
+            st.session_state.cruce_df2 = None
+            
         if file_cruce1 and file_cruce2:
-            if st.button("🔍 Comparar Archivos"):
+            # Botón para Cargar (solo si no están cargados o si cambian archivos)
+            # Nota: Streamlit reinicia file_uploader si se recarga la página, 
+            # pero aquí queremos persistencia durante la sesión de análisis.
+            
+            if st.button("📥 Cargar Archivos para Análisis"):
                 try:
-                    # Optimización: Leer solo columnas necesarias si fuera posible, pero como es dinámico leemos todo
-                    # Usamos dtype=str para evitar inferencias costosas y errores de memoria en archivos grandes
-                    # Usamos engine='openpyxl' explícito
                     with st.spinner("Leyendo archivos grandes... esto puede tardar unos momentos..."):
-                        # Forzar recolección de basura antes de cargar
-                        import gc
                         gc.collect()
                         
-                        df_c1 = pd.read_excel(file_cruce1, engine="openpyxl", dtype=str)
-                        df_c2 = pd.read_excel(file_cruce2, engine="openpyxl", dtype=str)
-                    
-                    st.success(f"Archivos cargados: {df_c1.shape[0]} filas en A, {df_c2.shape[0]} filas en B")
-                    
-                    # Limpieza básica para reducir memoria
-                    df_c1 = clean_df_for_st(df_c1)
-                    df_c2 = clean_df_for_st(df_c2)
-
-                    common_cols = list(set(df_c1.columns) & set(df_c2.columns))
-                    
-                    if common_cols:
-                        col_key = st.selectbox("Seleccione columna clave para cruzar (ej: Cédula, Código)", common_cols)
+                        # Leer y guardar en Session State
+                        st.session_state.cruce_df1 = pd.read_excel(file_cruce1, engine="openpyxl", dtype=str)
+                        st.session_state.cruce_df2 = pd.read_excel(file_cruce2, engine="openpyxl", dtype=str)
                         
-                        # Optimización: Convertir a string vectorizado y strip
-                        df_c1[col_key] = df_c1[col_key].astype(str).str.strip()
-                        df_c2[col_key] = df_c2[col_key].astype(str).str.strip()
+                        st.session_state.cruce_df1 = clean_df_for_st(st.session_state.cruce_df1)
+                        st.session_state.cruce_df2 = clean_df_for_st(st.session_state.cruce_df2)
                         
-                        with st.spinner("Realizando cruce de datos..."):
-                            # Usar indicator=True para saber origen de manera más eficiente
-                            merged = pd.merge(df_c1, df_c2, on=col_key, how='outer', indicator=True, suffixes=('_A', '_B'))
-                            
-                            coincidencias = merged[merged['_merge'] == 'both'].drop(columns=['_merge'])
-                            no_en_b = merged[merged['_merge'] == 'left_only'].drop(columns=['_merge']) # Estaban en A pero no en B
-                            no_en_a = merged[merged['_merge'] == 'right_only'].drop(columns=['_merge']) # Estaban en B pero no en A
-                            
-                            # Liberar memoria del merged
-                            del merged
-                            gc.collect()
+                        st.success(f"Archivos cargados en memoria: {st.session_state.cruce_df1.shape[0]} filas en A, {st.session_state.cruce_df2.shape[0]} filas en B")
                         
-                        st.divider()
-                        
-                        col_res1, col_res2, col_res3 = st.columns(3)
-                        with col_res1:
-                            st.metric("Coincidencias", len(coincidencias))
-                        with col_res2:
-                            st.metric("Solo en Archivo A", len(no_en_b))
-                        with col_res3:
-                            st.metric("Solo en Archivo B", len(no_en_a))
-                        
-                        tab_res1, tab_res2, tab_res3 = st.tabs(["✅ Coincidencias", "⚠️ Solo en A", "⚠️ Solo en B"])
-                        
-                        with tab_res1:
-                            st.dataframe(coincidencias)
-                        with tab_res2:
-                            st.dataframe(no_en_b)
-                        with tab_res3:
-                            st.dataframe(no_en_a)
-                        
-                    else:
-                        st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
-                    
-                except MemoryError:
-                    st.error("⚠️ Error de Memoria: Los archivos son demasiado grandes para procesarlos simultáneamente. Intente cerrar otras aplicaciones o dividir los archivos.")
                 except Exception as e:
-                    st.error(f"Error en el cruce: {e}")
+                    st.error(f"Error cargando archivos: {e}")
+            
+            # Si ya hay datos en memoria, mostrar opciones de cruce
+            if st.session_state.cruce_df1 is not None and st.session_state.cruce_df2 is not None:
+                df_c1 = st.session_state.cruce_df1
+                df_c2 = st.session_state.cruce_df2
+                
+                common_cols = list(set(df_c1.columns) & set(df_c2.columns))
+                
+                if common_cols:
+                    col_key = st.selectbox("Seleccione columna clave para cruzar (ej: Cédula, Código)", common_cols)
+                    
+                    # Botón para EJECUTAR el cruce (Usuario pidió explícitamente este botón)
+                    if st.button("🚀 Iniciar Cruce de Datos"):
+                        try:
+                            # Optimización: Convertir a string vectorizado y strip
+                            df_c1[col_key] = df_c1[col_key].astype(str).str.strip()
+                            df_c2[col_key] = df_c2[col_key].astype(str).str.strip()
+                            
+                            with st.spinner("Realizando cruce de datos..."):
+                                progress_bar = st.progress(0)
+                                
+                                # Paso 1: Lectura y Preparación (Simulado 30%)
+                                progress_bar.progress(30, text="Analizando estructuras...")
+                                
+                                # Usar indicator=True para saber origen de manera más eficiente
+                                merged = pd.merge(df_c1, df_c2, on=col_key, how='outer', indicator=True, suffixes=('_A', '_B'))
+                                
+                                progress_bar.progress(60, text="Clasificando registros...")
+                                
+                                coincidencias = merged[merged['_merge'] == 'both'].drop(columns=['_merge'])
+                                
+                                # Lógica para NO Repetidos (Unificados)
+                                no_repetidos = merged[merged['_merge'] != 'both'].copy()
+                                no_repetidos['Origen_Datos'] = no_repetidos['_merge'].map({
+                                    'left_only': 'Solo en Archivo A',
+                                    'right_only': 'Solo en Archivo B'
+                                })
+                                no_repetidos = no_repetidos.drop(columns=['_merge'])
+                                
+                                # Separar para métricas
+                                no_en_b = no_repetidos[no_repetidos['Origen_Datos'] == 'Solo en Archivo A']
+                                no_en_a = no_repetidos[no_repetidos['Origen_Datos'] == 'Solo en Archivo B']
+                                
+                                # Liberar memoria del merged
+                                del merged
+                                gc.collect()
+                                
+                                progress_bar.progress(90, text="Generando reportes...")
+                                
+                                # Generar Buffer Excel para descarga
+                                buffer_cruce = io.BytesIO()
+                                with pd.ExcelWriter(buffer_cruce, engine='xlsxwriter') as writer:
+                                    coincidencias.to_excel(writer, sheet_name='REPETIDOS', index=False)
+                                    no_en_b.to_excel(writer, sheet_name='NO REPETIDOS', index=False)
+                                buffer_cruce.seek(0)
+                                
+                                # Guardar resultados en Session State para que no desaparezcan
+                                st.session_state.cruce_resultado = {
+                                    'coincidencias': coincidencias,
+                                    'no_en_b': no_en_b,
+                                    'no_en_a': no_en_a,
+                                    'buffer': buffer_cruce
+                                }
+                                
+                                progress_bar.progress(100, text="¡Análisis Completado!")
+                                time.sleep(1)
+                                progress_bar.empty()
+                                st.rerun() # Recargar para mostrar resultados persistentes
+
+                        except MemoryError:
+                            st.error("⚠️ Error de Memoria: Los archivos son demasiado grandes.")
+                        except Exception as e:
+                            st.error(f"Error en el cruce: {e}")
+
+                else:
+                    st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
+            
+            # Mostrar Resultados si existen en Session State
+            if 'cruce_resultado' in st.session_state:
+                res = st.session_state.cruce_resultado
+                
+                st.divider()
+                st.success("✅ Resultados del último cruce:")
+                
+                col_res1, col_res2, col_res3 = st.columns(3)
+                with col_res1:
+                    st.metric("Coincidencias", len(res['coincidencias']))
+                with col_res2:
+                    st.metric("Solo en Archivo A", len(res['no_en_b']))
+                with col_res3:
+                    st.metric("Solo en Archivo B", len(res['no_en_a']))
+                    
+                # Botón de Descarga
+                st.download_button(
+                    label="📥 Descargar Resultado del Cruce (Excel)",
+                    data=res['buffer'],
+                    file_name=f"cruce_datos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                
+                tab_res1, tab_res2, tab_res3 = st.tabs(["✅ Coincidencias", "⚠️ Solo en A", "⚠️ Solo en B"])
+                
+                with tab_res1:
+                    st.dataframe(res['coincidencias'])
+                with tab_res2:
+                    st.dataframe(res['no_en_b'])
+                with tab_res3:
+                    st.dataframe(res['no_en_a'])
 
 
     # Si no hay datos y no es admin, no mostrar resto
@@ -1106,5 +1176,4 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
-
 
