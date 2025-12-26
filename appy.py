@@ -531,9 +531,79 @@ def eliminar_consolidado():
     except Exception as e:
         st.error(f"Error al eliminar: {e}")
 
+# ===================== GESTIÓN DE USUARIOS Y ESTADO =====================
+USERS_LIST = ["admin", "cristian"]
+STATUS_FILE = "users_status.json"
+
+def update_user_status(username):
+    try:
+        status_data = {}
+        if os.path.exists(STATUS_FILE):
+            try:
+                with open(STATUS_FILE, "r") as f:
+                    status_data = json.load(f)
+            except:
+                pass
+        
+        status_data[username] = time.time()
+        
+        with open(STATUS_FILE, "w") as f:
+            json.dump(status_data, f)
+    except:
+        pass
+
+def get_users_status():
+    status_data = {}
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE, "r") as f:
+                status_data = json.load(f)
+        except:
+            pass
+    
+    current_time = time.time()
+    results = []
+    
+    for user in USERS_LIST:
+        last_seen = status_data.get(user, 0)
+        # Si se ha visto en los últimos 5 minutos (300 segundos), está online
+        is_online = (current_time - last_seen) < 300 
+        results.append({"Usuario": user, "Estado": "En Línea" if is_online else "Desconectado", "Online": is_online})
+        
+    return pd.DataFrame(results)
+
+@st.fragment(run_every=5)
+def render_user_status_panel():
+    df_status = get_users_status()
+    
+    # Mostrar como tarjetas o tabla estilizada
+    col_u1, col_u2 = st.columns(2)
+    
+    for index, row in df_status.iterrows():
+        with col_u1 if index % 2 == 0 else col_u2:
+            color_status = "#2ec4b6" if row["Online"] else "#e63946" # Verde o Rojo
+            bg_color = "#e0fbfc" if row["Online"] else "#ffe5d9"
+            
+            st.markdown(f"""
+            <div style='padding:15px; background:{bg_color}; border-radius:10px; border:1px solid {color_status}; margin-bottom:10px; display:flex; align_items:center; justify-content:space-between;'>
+                <div style='display:flex; align_items:center;'>
+                    <span style='font-size:24px; margin-right:10px;'>👤</span>
+                    <h3 style='margin:0; color:#005f73;'>{row['Usuario']}</h3>
+                </div>
+                <div style='display:flex; align_items:center;'>
+                    <span style='height: 15px; width: 15px; background-color: {color_status}; border-radius: 50%; display: inline-block; margin-right:5px;'></span>
+                    <b style='color:{color_status};'>{row['Estado']}</b>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
 # ===================== APP PRINCIPAL =====================
 def main_app():
     load_css()
+    
+    # Actualizar estado de usuario activo
+    if st.session_state.usuario:
+        update_user_status(st.session_state.usuario)
     
     # --- MENSAJE BIENVENIDA (JS 10s) ---
     if 'welcome_shown' not in st.session_state:
@@ -661,17 +731,19 @@ def main_app():
     tabs_names = ["📊 ANÁLISIS", "💰 TOTAL", "🏆 DASHBOARD", "✅ CUMPLIMIENTO", "🔄 CRUCES DE DATOS"]
     if st.session_state.usuario == "admin":
         tabs_names.insert(0, "📂 CONSOLIDACIÓN")
+        tabs_names.insert(0, "👥 USUARIOS")
     
     tabs = st.tabs(tabs_names)
     
     # Asignar variables a tabs
     if st.session_state.usuario == "admin":
-        tab_consol = tabs[0]
-        tab1 = tabs[1]
-        tab2 = tabs[2]
-        tab3 = tabs[3]
-        tab4 = tabs[4]
-        tab_cruces = tabs[5]
+        tab_users = tabs[0]
+        tab_consol = tabs[1]
+        tab1 = tabs[2]
+        tab2 = tabs[3]
+        tab3 = tabs[4]
+        tab4 = tabs[5]
+        tab_cruces = tabs[6]
     else:
         tab1 = tabs[0]
         tab2 = tabs[1]
@@ -679,6 +751,13 @@ def main_app():
         tab4 = tabs[3]
         tab_cruces = tabs[4]
     
+    # TAB USUARIOS (Solo Admin)
+    if st.session_state.usuario == "admin":
+        with tab_users:
+            st.subheader("👥 Gestión de Usuarios y Estado")
+            # Panel auto-actualizable cada 5 segundos
+            render_user_status_panel()
+
     # TAB CONSOLIDACIÓN (Solo Admin)
     if st.session_state.usuario == "admin":
         with tab_consol:
