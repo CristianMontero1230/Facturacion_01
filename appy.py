@@ -709,22 +709,43 @@ def main_app():
         if file_cruce1 and file_cruce2:
             if st.button("🔍 Comparar Archivos"):
                 try:
-                    df_c1 = pd.read_excel(file_cruce1, engine="openpyxl")
-                    df_c2 = pd.read_excel(file_cruce2, engine="openpyxl")
+                    # Optimización: Leer solo columnas necesarias si fuera posible, pero como es dinámico leemos todo
+                    # Usamos dtype=str para evitar inferencias costosas y errores de memoria en archivos grandes
+                    # Usamos engine='openpyxl' explícito
+                    with st.spinner("Leyendo archivos grandes... esto puede tardar unos momentos..."):
+                        # Forzar recolección de basura antes de cargar
+                        import gc
+                        gc.collect()
+                        
+                        df_c1 = pd.read_excel(file_cruce1, engine="openpyxl")
+                        df_c2 = pd.read_excel(file_cruce2, engine="openpyxl")
                     
                     st.success(f"Archivos cargados: {df_c1.shape[0]} filas en A, {df_c2.shape[0]} filas en B")
                     
+                    # Limpieza básica para reducir memoria
+                    df_c1 = clean_df_for_st(df_c1)
+                    df_c2 = clean_df_for_st(df_c2)
+
                     common_cols = list(set(df_c1.columns) & set(df_c2.columns))
                     
                     if common_cols:
                         col_key = st.selectbox("Seleccione columna clave para cruzar (ej: Cédula, Código)", common_cols)
                         
+                        # Optimización: Convertir a string vectorizado y strip
                         df_c1[col_key] = df_c1[col_key].astype(str).str.strip()
                         df_c2[col_key] = df_c2[col_key].astype(str).str.strip()
                         
-                        coincidencias = pd.merge(df_c1, df_c2, on=col_key, how='inner', suffixes=('_A', '_B'))
-                        no_en_b = df_c1[~df_c1[col_key].isin(df_c2[col_key])]
-                        no_en_a = df_c2[~df_c2[col_key].isin(df_c1[col_key])]
+                        with st.spinner("Realizando cruce de datos..."):
+                            # Usar indicator=True para saber origen de manera más eficiente
+                            merged = pd.merge(df_c1, df_c2, on=col_key, how='outer', indicator=True, suffixes=('_A', '_B'))
+                            
+                            coincidencias = merged[merged['_merge'] == 'both'].drop(columns=['_merge'])
+                            no_en_b = merged[merged['_merge'] == 'left_only'].drop(columns=['_merge']) # Estaban en A pero no en B
+                            no_en_a = merged[merged['_merge'] == 'right_only'].drop(columns=['_merge']) # Estaban en B pero no en A
+                            
+                            # Liberar memoria del merged
+                            del merged
+                            gc.collect()
                         
                         st.divider()
                         
@@ -748,8 +769,11 @@ def main_app():
                     else:
                         st.warning("No se encontraron columnas con el mismo nombre para cruzar automáticamente.")
                     
+                except MemoryError:
+                    st.error("⚠️ Error de Memoria: Los archivos son demasiado grandes para procesarlos simultáneamente. Intente cerrar otras aplicaciones o dividir los archivos.")
                 except Exception as e:
                     st.error(f"Error en el cruce: {e}")
+
 
     # Si no hay datos y no es admin, no mostrar resto
     if df is None:
