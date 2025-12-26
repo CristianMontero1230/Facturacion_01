@@ -379,6 +379,11 @@ def leer_excel(file_obj1, file_obj2=None):
                     
                     st.success("✅ Archivo consolidado generado exitosamente.")
                     st.session_state['consolidado_path'] = output_path
+                    
+                    # Forzar actualización de timestamp para que otros usuarios recarguen
+                    if os.path.exists(output_path):
+                        # "Touch" el archivo para asegurar cambio de fecha si fue muy rápido
+                        os.utime(output_path, None)
 
                 except Exception as e:
                     st.error(f"Error generando consolidado: {e}")
@@ -717,8 +722,8 @@ def main_app():
                         import gc
                         gc.collect()
                         
-                        df_c1 = pd.read_excel(file_cruce1, engine="openpyxl")
-                        df_c2 = pd.read_excel(file_cruce2, engine="openpyxl")
+                        df_c1 = pd.read_excel(file_cruce1, engine="openpyxl", dtype=str)
+                        df_c2 = pd.read_excel(file_cruce2, engine="openpyxl", dtype=str)
                     
                     st.success(f"Archivos cargados: {df_c1.shape[0]} filas en A, {df_c2.shape[0]} filas en B")
                     
@@ -1101,4 +1106,5 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
+
 
