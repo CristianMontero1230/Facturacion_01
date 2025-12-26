@@ -764,29 +764,24 @@ def main_app():
                                 progress_bar.progress(30, text="Analizando estructuras...")
                                 
                                 # Usar indicator=True para saber origen de manera más eficiente
-                                merged = pd.merge(df_c1, df_c2, on=col_key, how='outer', indicator=True, suffixes=('_A', '_B'))
+                                # ESTRATEGIA OPTIMIZADA DE MEMORIA: NO USAR OUTER MERGE GIGANTE
                                 
-                                progress_bar.progress(60, text="Clasificando registros...")
+                                # 1. Identificar claves
+                                keys_a = set(df_c1[col_key])
+                                keys_b = set(df_c2[col_key])
                                 
-                                coincidencias = merged[merged['_merge'] == 'both'].drop(columns=['_merge'])
+                                # 2. Filtrar "Solo en A" (No Repetidos) SIN hacer merge masivo
+                                # Esto es mucho más ligero que un outer join
+                                no_en_b = df_c1[~df_c1[col_key].isin(keys_b)].copy()
                                 
-                                # Lógica para NO Repetidos (Unificados)
-                                no_repetidos = merged[merged['_merge'] != 'both'].copy()
-                                no_repetidos['Origen_Datos'] = no_repetidos['_merge'].map({
-                                    'left_only': 'Solo en Archivo A',
-                                    'right_only': 'Solo en Archivo B'
-                                })
-                                no_repetidos = no_repetidos.drop(columns=['_merge'])
+                                # 3. Filtrar "Solo en B" (si se necesita métrica)
+                                no_en_a = df_c2[~df_c2[col_key].isin(keys_a)].copy()
                                 
-                                # Separar para métricas
-                                no_en_b = no_repetidos[no_repetidos['Origen_Datos'] == 'Solo en Archivo A']
-                                no_en_a = no_repetidos[no_repetidos['Origen_Datos'] == 'Solo en Archivo B']
+                                # 4. Coincidencias (Repetidos) - Inner Merge
+                                # Solo unimos lo que coincide
+                                coincidencias = pd.merge(df_c1, df_c2, on=col_key, how='inner', suffixes=('_A', '_B'))
                                 
-                                # Liberar memoria del merged
-                                del merged
-                                gc.collect()
-                                
-                                progress_bar.progress(90, text="Generando reportes...")
+                                progress_bar.progress(80, text="Generando reportes...")
                                 
                                 # Generar Buffer Excel para descarga
                                 buffer_cruce = io.BytesIO()
@@ -804,9 +799,9 @@ def main_app():
                                 }
                                 
                                 progress_bar.progress(100, text="¡Análisis Completado!")
-                                time.sleep(1)
+                                time.sleep(0.5)
                                 progress_bar.empty()
-                                st.rerun() # Recargar para mostrar resultados persistentes
+                                st.rerun()
 
                         except MemoryError:
                             st.error("⚠️ Error de Memoria: Los archivos son demasiado grandes.")
@@ -1176,4 +1171,3 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
-
