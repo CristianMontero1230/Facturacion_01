@@ -579,7 +579,7 @@ def eliminar_consolidado():
         st.error(f"Error al eliminar: {e}")
 
 # ===================== GESTIÓN DE USUARIOS Y ESTADO =====================
-USERS_LIST = ["admin", "cristian"]
+USERS_LIST = ["admin", "cristian", "marta"]
 STATUS_FILE = "users_status.json"
 
 def update_user_status(username):
@@ -1371,4 +1371,5 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
+
 
