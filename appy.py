@@ -1138,6 +1138,23 @@ def main_app():
                 use_container_width=True,
                 height=600
             )
+            
+            # Gráfica Circular de Participación
+            st.markdown("### 🥧 Participación por Procedimiento")
+            if not agrupado.empty:
+                # Tomar Top 10 para legibilidad
+                top_agrupado = agrupado.head(10).copy()
+                
+                fig_pie = px.pie(
+                    top_agrupado,
+                    names=col_proc,
+                    values="Valor_Num",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.sequential.Teal
+                )
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                fig_pie.update_layout(showlegend=True, height=500)
+                st.plotly_chart(fig_pie, use_container_width=True)
 
     # TAB 3: DASHBOARD
     with tab3:
@@ -1183,30 +1200,27 @@ def main_app():
                 )
                 
             with col_dash_right:
-                st.markdown("### 🏆 Top 10 Profesionales")
-                top_10 = counts.head(10).sort_values("Servicios", ascending=False)
+                st.markdown("### 🏆 Top 10 Profesionales (Cumplimiento)")
+                top_10 = counts.head(10).sort_values("Porcentaje", ascending=True) # Ordenar para barra horizontal o vertical
                 
-                st.dataframe(
+                fig_bar = px.bar(
                     top_10,
-                    column_config={
-                        "Profesional": "Profesional",
-                        "Servicios": st.column_config.NumberColumn(
-                            "Servicios",
-                            help="Total de servicios realizados",
-                            format="%d"
-                        ),
-                        "Porcentaje": st.column_config.ProgressColumn(
-                            "Cumplimiento",
-                            help="Porcentaje respecto a la meta",
-                            format="%.1f%%",
-                            min_value=0,
-                            max_value=100
-                        )
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    height=600
+                    x="Profesional",
+                    y="Porcentaje",
+                    text="Porcentaje",
+                    color="Porcentaje",
+                    color_continuous_scale="Teal"
                 )
+                
+                fig_bar.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig_bar.update_layout(
+                    xaxis_title="Profesional",
+                    yaxis_title="% Cumplimiento Meta",
+                    yaxis_range=[0, max(110, top_10["Porcentaje"].max())],
+                    showlegend=False,
+                    height=500
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
     
     # TAB 4: CUMPLIMIENTO
     with tab4:
