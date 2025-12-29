@@ -186,11 +186,24 @@ def generar_excel_filtros(df, nombre_prof, fecha_inicio, fecha_fin, procedimient
         # HOJA 3: RESUMEN PACIENTE
         if not df.empty:
             col_paciente = next((c for c in df.columns if "paciente" in str(c).lower()), None)
-            if col_paciente and col_procedimiento:
+            # Reutilizar columnas detectadas o buscar de nuevo si es necesario
+            if 'col_procedimiento' not in locals() or not col_procedimiento:
+                col_procedimiento = next((c for c in df.columns if "nombre procedimiento" in str(c).lower()), None)
+            if 'col_valor' not in locals() or not col_valor:
+                col_valor = next((c for c in df.columns if "valor" in str(c).lower()), None)
+
+            if col_paciente and col_procedimiento and col_valor:
                 try:
                     temp = df.copy()
-                    pivot = temp.pivot_table(index=col_paciente, columns=col_procedimiento, aggfunc='size', fill_value=0)
-                    pivot.to_excel(writer, sheet_name='Resumen Paciente')
+                    temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0)
+                    
+                    # Agrupar por Paciente y Procedimiento
+                    agrupado_paciente = temp.groupby([col_paciente, col_procedimiento]).agg(
+                        Cantidad=(col_procedimiento, 'count'),
+                        Valor_Total=('_valor', 'sum')
+                    ).reset_index()
+                    
+                    agrupado_paciente.to_excel(writer, sheet_name='Resumen Paciente', index=False)
                 except:
                     pass
         
@@ -517,7 +530,7 @@ def login():
             submit = st.form_submit_button("Acceder")
             
             if submit:
-                if user in ["admin", "Cristian", "Marta", "Alejandra"] and password == "123":
+                if user in ["admin", "cristian"] and password == "123":
                     st.session_state.usuario = user
                     st.rerun()
                 else:
@@ -563,7 +576,7 @@ def eliminar_consolidado():
         st.error(f"Error al eliminar: {e}")
 
 # ===================== GESTIÓN DE USUARIOS Y ESTADO =====================
-USERS_LIST = ["admin", "Cristian", "Alejandra", "Marta"]
+USERS_LIST = ["admin", "cristian"]
 STATUS_FILE = "users_status.json"
 
 def update_user_status(username):
@@ -1281,6 +1294,4 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
-
-
 
