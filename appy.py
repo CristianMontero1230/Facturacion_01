@@ -533,7 +533,7 @@ def login():
             submit = st.form_submit_button("Acceder")
             
             if submit:
-                if user in ["admin", "cristian"] and password == "123":
+                if user in ["admin", "cristian""marta"] and password == "123":
                     st.session_state.usuario = user
                     st.rerun()
                 else:
@@ -1371,3 +1371,4 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
+
