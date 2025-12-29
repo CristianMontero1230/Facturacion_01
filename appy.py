@@ -13,7 +13,7 @@ import io
 import gc
 import textwrap
 
-APP_VERSION = "1.5.0 (Actualizado)"
+APP_VERSION = "1.0"
 
 # ===================== CONFIGURACIÓN DE PÁGINA =====================
 st.set_page_config(
@@ -1328,3 +1328,4 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
+
