@@ -1139,22 +1139,40 @@ def main_app():
                 height=600
             )
             
-            # Gráfica Circular de Participación
-            st.markdown("### 🍩 Participación % por Procedimiento")
+            # Gráfica de Barras Horizontal (Mejorada Visualmente)
+            st.markdown("### 📊 Participación por Procedimiento (Top 15)")
             if not agrupado.empty:
-                # Tomar Top 10 para legibilidad
-                top_agrupado = agrupado.head(10).copy()
-                
-                fig_pie = px.pie(
+                # Tomar Top 15 para mejor detalle sin saturar
+                top_agrupado = agrupado.head(15).copy()
+                top_agrupado = top_agrupado.sort_values("Valor_Num", ascending=True) # Ordenar para gráfico horizontal
+
+                fig_bar = px.bar(
                     top_agrupado,
-                    names=col_proc,
-                    values="Valor_Num",
-                    hole=0.5, # Más estilo anillo/barra circular
-                    color_discrete_sequence=px.colors.sequential.Teal
+                    x="Valor_Num",
+                    y=col_proc,
+                    text="Participacion", # Mostrar porcentaje en la barra
+                    color="Participacion", # Colorear por intensidad de participación
+                    color_continuous_scale="Tealgrn", # Escala de colores profesional (Verde azulado)
+                    orientation='h' # Orientación Horizontal para leer nombres largos
                 )
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                fig_pie.update_layout(showlegend=True, height=500)
-                st.plotly_chart(fig_pie, use_container_width=True)
+                
+                fig_bar.update_traces(
+                    texttemplate='<b>%{text:.1f}%</b>', # Texto en negrita
+                    textposition='outside', # Texto fuera de la barra para claridad
+                    hovertemplate='<b>%{y}</b><br>Facturado: $%{x:,.0f}<br>Participación: %{text:.1f}%'
+                )
+                
+                fig_bar.update_layout(
+                    xaxis_title="Valor Facturado ($)",
+                    yaxis_title="", # Ocultar título del eje Y para ganar espacio
+                    height=700, # Más altura para acomodar nombres
+                    showlegend=False,
+                    xaxis=dict(showgrid=True, gridcolor='#e0e0e0'),
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(size=14) # Letra más grande
+                )
+                
+                st.plotly_chart(fig_bar, use_container_width=True)
 
     # TAB 3: DASHBOARD
     with tab3:
