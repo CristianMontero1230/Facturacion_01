@@ -1032,10 +1032,9 @@ def main_app():
                     temp = df_filtrado.copy()
                     temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0) if col_valor else 0
                     
-                    # Agrupación por Paciente y Procedimiento (Detallado)
+                    # Agrupación por Paciente y Procedimiento (Detallado - Solo Cantidad)
                     resumen_paciente = temp.groupby([col_paciente, col_procedimiento]).agg(
-                        Cantidad=(col_procedimiento, 'count'),
-                        Valor_Total=('_valor', 'sum')
+                        Cantidad=(col_procedimiento, 'count')
                     ).reset_index()
                     
                     resumen_paciente = resumen_paciente.sort_values([col_paciente, "Cantidad"], ascending=[True, False])
@@ -1050,11 +1049,6 @@ def main_app():
                                 "Total Procedimiento",
                                 help="Cantidad de veces que se realizó este procedimiento al paciente",
                                 format="%d"
-                            ),
-                            "Valor_Total": st.column_config.NumberColumn(
-                                "Valor Total",
-                                help="Valor monetario total de este procedimiento para el paciente",
-                                format="$ %d"
                             )
                         },
                         hide_index=True,
@@ -1140,7 +1134,7 @@ def main_app():
             )
             
             # Gráfica Circular de Participación
-            st.markdown("### 🥧 Participación por Procedimiento")
+            st.markdown("### 🍩 Participación % por Procedimiento")
             if not agrupado.empty:
                 # Tomar Top 10 para legibilidad
                 top_agrupado = agrupado.head(10).copy()
@@ -1149,7 +1143,7 @@ def main_app():
                     top_agrupado,
                     names=col_proc,
                     values="Valor_Num",
-                    hole=0.4,
+                    hole=0.5, # Más estilo anillo/barra circular
                     color_discrete_sequence=px.colors.sequential.Teal
                 )
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
