@@ -11,6 +11,7 @@ import glob
 import time
 import io
 import gc
+import textwrap
 
 APP_VERSION = "1.5.0 (Actualizado)"
 
@@ -1125,80 +1126,62 @@ def main_app():
                 pct = row["Participacion"]
                 
                 with col_actual:
-                    st.markdown(f"""
-                    <div style="
-                        background-color: white; 
-                        padding: 20px; 
-                        border-radius: 12px; 
-                        box-shadow: 0 4px 10px rgba(0,0,0,0.05); 
-                        border: 1px solid #e0e0e0;
-                        border-left: 5px solid #005f73; 
-                        margin-bottom: 20px;
-                        height: 100%;
-                    ">
-                        <h5 style="color: #005f73; margin-top: 0; font-weight: 700; height: 50px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-                            {proc_name}
-                        </h5>
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; border-top: 1px solid #f0f0f0; padding-top: 10px;">
-                            <div>
-                                <span style="display: block; color: #888; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px;">Frecuencia</span>
-                                <span style="font-size: 1.2em; font-weight: 600; color: #333;">{cantidad}</span>
-                            </div>
-                            <div style="text-align: right;">
-                                <span style="display: block; color: #888; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px;">Facturado</span>
-                                <span style="font-size: 1.2em; font-weight: 600; color: #2ec4b6;">{valor_fmt}</span>
-                            </div>
-                        </div>
-                        
-                        <div style="margin-top: 15px;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                                <span style="font-size: 0.8em; color: #555;">Participación</span>
-                                <span style="font-size: 0.8em; font-weight: bold; color: #005f73;">{pct:.1f}%</span>
-                            </div>
-                            <div style="background-color: #e0fbfc; height: 6px; border-radius: 3px; width: 100%;">
-                                <div style="background-color: #005f73; height: 6px; border-radius: 3px; width: {min(pct, 100)}%;"></div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    card_html = f"""
+<div style="background-color: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border: 1px solid #e0e0e0; border-left: 5px solid #005f73; margin-bottom: 20px; height: 100%;">
+<h5 style="color: #005f73; margin-top: 0; font-weight: 700; height: 50px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">{proc_name}</h5>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; border-top: 1px solid #f0f0f0; padding-top: 10px;">
+<div>
+<span style="display: block; color: #888; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px;">Frecuencia</span>
+<span style="font-size: 1.2em; font-weight: 600; color: #333;">{cantidad}</span>
+</div>
+<div style="text-align: right;">
+<span style="display: block; color: #888; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px;">Facturado</span>
+<span style="font-size: 1.2em; font-weight: 600; color: #2ec4b6;">{valor_fmt}</span>
+</div>
+</div>
+<div style="margin-top: 15px;">
+<div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+<span style="font-size: 0.8em; color: #555;">Participación</span>
+<span style="font-size: 0.8em; font-weight: bold; color: #005f73;">{pct:.1f}%</span>
+</div>
+<div style="background-color: #e0fbfc; height: 6px; border-radius: 3px; width: 100%;">
+<div style="background-color: #005f73; height: 6px; border-radius: 3px; width: {min(pct, 100)}%;"></div>
+</div>
+</div>
+</div>
+"""
+                    st.markdown(card_html, unsafe_allow_html=True)
             
-            # Gráfica de Barras Horizontal (Mejorada Visualmente)
-            st.markdown("### 📊 Participación por Procedimiento (Top 15)")
+            # Gráfica Circular (Donut Chart)
+            st.markdown("### 📊 Participación por Procedimiento (Top 10)")
             if not agrupado.empty:
-                # Tomar Top 15 para mejor detalle sin saturar
-                top_agrupado = agrupado.head(15).copy()
-                top_agrupado = top_agrupado.sort_values("Valor_Num", ascending=True) # Ordenar para gráfico horizontal
-
-                fig_bar = px.bar(
+                # Tomar Top 10 para no saturar la gráfica circular
+                top_agrupado = agrupado.head(10).copy()
+                
+                fig_pie = px.pie(
                     top_agrupado,
-                    x="Valor_Num",
-                    y=col_proc,
-                    text="Participacion", # Mostrar porcentaje en la barra
-                    color="Participacion", # Colorear por intensidad de participación
-                    color_continuous_scale="Tealgrn", # Escala de colores profesional (Verde azulado)
-                    orientation='h' # Orientación Horizontal para leer nombres largos
+                    names=col_proc,
+                    values="Valor_Num",
+                    hole=0.4, # Donut chart para estilo moderno
+                    color_discrete_sequence=px.colors.sequential.Tealgrn_r # Colores profesionales
                 )
                 
-                fig_bar.update_traces(
-                    texttemplate='<b>%{text:.1f}%</b>', # Texto en negrita
-                    textposition='outside', # Texto fuera de la barra para claridad
-                    hovertemplate='<b>%{y}</b><br>Facturado: $%{x:,.0f}<br>Participación: %{text:.1f}%'
+                fig_pie.update_traces(
+                    textposition='inside', 
+                    textinfo='percent+label',
+                    hovertemplate='<b>%{label}</b><br>Facturado: $%{value:,.0f}<br>Participación: %{percent}'
                 )
                 
-                fig_bar.update_layout(
-                    xaxis_title="Valor Facturado ($)",
-                    yaxis_title="", # Ocultar título del eje Y para ganar espacio
-                    height=700, # Más altura para acomodar nombres
-                    showlegend=False,
-                    xaxis=dict(showgrid=True, gridcolor='#e0e0e0'),
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(size=14) # Letra más grande
+                fig_pie.update_layout(
+                    showlegend=False, # Ocultar leyenda para dar más espacio al gráfico y usar etiquetas internas
+                    height=600,
+                    margin=dict(t=30, b=30, l=30, r=30),
+                    font=dict(size=14)
                 )
                 
-                st.plotly_chart(fig_bar, use_container_width=True)
+                st.plotly_chart(fig_pie, use_container_width=True)
 
-    # TAB 3: DASHBOARD
+            # TAB 3: DASHBOARD
     with tab3:
         st.subheader("Dashboard Profesional")
         meta_dash = st.number_input("Meta General", value=cargar_meta("meta_dashboard.txt"))
