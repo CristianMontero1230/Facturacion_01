@@ -13,7 +13,7 @@ import io
 import gc
 import textwrap
 
-APP_VERSION = "1.0"
+APP_VERSION = "1.5.0 (Actualizado)"
 
 # ===================== CONFIGURACIÓN DE PÁGINA =====================
 st.set_page_config(
@@ -1030,21 +1030,67 @@ def main_app():
         st.subheader("Resumen Detallado por Paciente")
         
         if not df_filtrado.empty:
-            col_paciente = next((c for c in df_filtrado.columns if "paciente" in str(c).lower()), None)
-            col_procedimiento = next((c for c in df_filtrado.columns if "nombre procedimiento" in str(c).lower()), None)
+            # Búsqueda ampliada de columnas (Paciente)
+            candidates_paciente = ["paciente", "nombre completo", "nombre", "usuario", "afiliado", "cliente"]
+            col_paciente = None
+            for cand in candidates_paciente:
+                col_paciente = next((c for c in df_filtrado.columns if cand in str(c).lower()), None)
+                if col_paciente:
+                    break
+            
+            # Búsqueda ampliada de columnas (Procedimiento)
+            candidates_proc = ["nombre procedimiento", "procedimiento", "servicio", "actividad"]
+            col_procedimiento = None
+            for cand in candidates_proc:
+                col_procedimiento = next((c for c in df_filtrado.columns if cand in str(c).lower()), None)
+                if col_procedimiento:
+                    break
+
             col_valor = next((c for c in df_filtrado.columns if "valor" in str(c).lower()), None)
             
             if col_paciente and col_procedimiento:
                 try:
                     temp = df_filtrado.copy()
-                    temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0) if col_valor else 0
                     
-                    # Agrupación por Paciente y Procedimiento (Detallado - Solo Cantidad)
-                    resumen_paciente = temp.groupby([col_paciente, col_procedimiento]).agg(
-                        Cantidad=(col_procedimiento, 'count')
-                    ).reset_index()
+                    # Asegurar valor numérico
+                    if col_valor:
+                        temp["_valor_calc"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0)
+                    else:
+                        temp["_valor_calc"] = 0
                     
-                    resumen_paciente = resumen_paciente.sort_values([col_paciente, "Cantidad"], ascending=[True, False])
+                    # Buscar columna de cantidad si existe
+                    col_cantidad = next((c for c in df_filtrado.columns if "cantidad" in str(c).lower()), None)
+                    
+                    agg_dict = {
+                        "_valor_calc": "sum"
+                    }
+                    
+                    if col_cantidad:
+                         # Si existe columna cantidad, sumar
+                        temp[col_cantidad] = pd.to_numeric(temp[col_cantidad], errors='coerce').fillna(0)
+                        agg_dict[col_cantidad] = "sum"
+                    else:
+                        # Si no existe, contar registros (usamos una columna dummy)
+                        temp["_conteo"] = 1
+                        agg_dict["_conteo"] = "sum"
+                    
+                    # Agrupar
+                    resumen_paciente = temp.groupby([col_paciente, col_procedimiento]).agg(agg_dict).reset_index()
+                    
+                    # Renombrar columnas para visualización final
+                    rename_map = {
+                        "_valor_calc": "Valor Total"
+                    }
+                    
+                    if col_cantidad:
+                        rename_map[col_cantidad] = "Cantidad"
+                    else:
+                        rename_map["_conteo"] = "Cantidad"
+                        
+                    resumen_paciente.rename(columns=rename_map, inplace=True)
+                    
+                    # Ordenar
+                    resumen_paciente = resumen_paciente.sort_values([col_paciente, "Valor Total"], ascending=[True, False])
                     
                     # Formateo visual
                     st.dataframe(
@@ -1053,9 +1099,14 @@ def main_app():
                             col_paciente: "Nombre del Paciente",
                             col_procedimiento: "Nombre Procedimiento",
                             "Cantidad": st.column_config.NumberColumn(
-                                "Total Procedimiento",
-                                help="Cantidad de veces que se realizó este procedimiento al paciente",
+                                "Cantidad de Servicios",
+                                help="Cantidad total de servicios",
                                 format="%d"
+                            ),
+                            "Valor Total": st.column_config.NumberColumn(
+                                "Valor Total",
+                                help="Suma del valor facturado",
+                                format="$ %d"
                             )
                         },
                         hide_index=True,
@@ -1063,20 +1114,12 @@ def main_app():
                         height=500
                     )
                     
-                    with st.expander("Ver Detalle Matricial (Tabla Cruzada)"):
-                        pivot = temp.pivot_table(
-                            index=col_paciente,
-                            columns=col_procedimiento,
-                            aggfunc='size',
-                            fill_value=0
-                        )
-                        pivot = clean_df_for_st(pivot)
-                        st.dataframe(pivot, use_container_width=True)
-
                 except Exception as e:
                     st.error(f"Error agrupando: {e}")
+                    st.warning("Se muestran los datos sin agrupar debido a un error.")
                     st.dataframe(df_filtrado)
             else:
+                st.warning(f"No se encontraron las columnas necesarias para el resumen detallado. (Buscando: Paciente/Nombre, Procedimiento). Columnas disponibles: {', '.join(df_filtrado.columns)}")
                 st.dataframe(df_filtrado)
         else:
             st.info("Sin resultados para mostrar")
@@ -1328,4 +1371,3 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
-
