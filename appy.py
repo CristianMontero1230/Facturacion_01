@@ -12,6 +12,8 @@ import time
 import io
 import gc
 
+APP_VERSION = "1.5.0 (Actualizado)"
+
 # ===================== CONFIGURACIÓN DE PÁGINA =====================
 st.set_page_config(
     page_title="IPS GOLEMAN APP",
@@ -645,6 +647,10 @@ def render_user_status_panel():
 def main_app():
     load_css()
     
+    with st.sidebar:
+        st.markdown(f"**Versión App:** {APP_VERSION}")
+        st.markdown("---")
+
     # Actualizar estado de usuario activo
     if st.session_state.usuario:
         update_user_status(st.session_state.usuario)
