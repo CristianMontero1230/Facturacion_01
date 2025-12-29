@@ -1032,34 +1032,29 @@ def main_app():
                     temp = df_filtrado.copy()
                     temp["_valor"] = pd.to_numeric(temp[col_valor], errors='coerce').fillna(0) if col_valor else 0
                     
-                    # Agrupación por Paciente - Método Compatible
-                    g = temp.groupby(col_paciente)
-                    resumen_paciente = pd.DataFrame({
-                        "Total_Procedimientos": g[col_procedimiento].count(),
-                        "Tipos_Procedimientos": g[col_procedimiento].nunique(),
-                        "Valor_Total": g['_valor'].sum()
-                    }).reset_index()
+                    # Agrupación por Paciente y Procedimiento (Detallado)
+                    resumen_paciente = temp.groupby([col_paciente, col_procedimiento]).agg(
+                        Cantidad=(col_procedimiento, 'count'),
+                        Valor_Total=('_valor', 'sum')
+                    ).reset_index()
                     
-                    resumen_paciente = resumen_paciente.sort_values("Total_Procedimientos", ascending=False)
+                    resumen_paciente = resumen_paciente.sort_values([col_paciente, "Cantidad"], ascending=[True, False])
                     
                     # Formateo visual
                     st.dataframe(
                         resumen_paciente,
                         column_config={
                             col_paciente: "Nombre del Paciente",
-                            "Total_Procedimientos": st.column_config.NumberColumn(
-                                "Total Procedimientos",
-                                help="Cantidad total de procedimientos realizados a este paciente",
-                                format="%d"
-                            ),
-                            "Tipos_Procedimientos": st.column_config.NumberColumn(
-                                "Tipos Únicos",
-                                help="Cantidad de tipos de procedimientos diferentes",
+                            col_procedimiento: "Nombre Procedimiento",
+                            "Cantidad": st.column_config.NumberColumn(
+                                "Total Procedimiento",
+                                help="Cantidad de veces que se realizó este procedimiento al paciente",
                                 format="%d"
                             ),
                             "Valor_Total": st.column_config.NumberColumn(
-                                "Valor Facturado",
-                                format="$ %d",
+                                "Valor Total",
+                                help="Valor monetario total de este procedimiento para el paciente",
+                                format="$ %d"
                             )
                         },
                         hide_index=True,
@@ -1294,4 +1289,3 @@ if __name__ == "__main__":
         # Intentar mostrar detalles si es posible
         import traceback
         st.code(traceback.format_exc())
-
