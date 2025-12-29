@@ -1112,32 +1112,56 @@ def main_app():
             
             st.subheader("Detalle por Procedimiento")
             
-            st.dataframe(
-                agrupado,
-                column_config={
-                    col_proc: "Procedimiento",
-                    "Cantidad": st.column_config.NumberColumn(
-                        "Frecuencia",
-                        help="Cantidad de veces realizado",
-                        format="%d"
-                    ),
-                    "Valor Total": st.column_config.TextColumn(
-                        "Valor Total",
-                        help="Valor facturado (COP)"
-                    ),
-                    "Participacion": st.column_config.ProgressColumn(
-                        "Participación %",
-                        format="%.1f%%",
-                        min_value=0,
-                        max_value=100,
-                        help="Peso sobre el total facturado"
-                    ),
-                    "Valor_Num": None 
-                },
-                hide_index=True,
-                use_container_width=True,
-                height=600
-            )
+            # Visualización en Tarjetas (Grid Layout)
+            # Iterar sobre el dataframe y crear tarjetas
+            cols_grid = st.columns(3) # 3 Columnas por fila
+            
+            for index, row in agrupado.iterrows():
+                col_actual = cols_grid[index % 3]
+                
+                proc_name = row[col_proc]
+                cantidad = row["Cantidad"]
+                valor_fmt = row["Valor Total"]
+                pct = row["Participacion"]
+                
+                with col_actual:
+                    st.markdown(f"""
+                    <div style="
+                        background-color: white; 
+                        padding: 20px; 
+                        border-radius: 12px; 
+                        box-shadow: 0 4px 10px rgba(0,0,0,0.05); 
+                        border: 1px solid #e0e0e0;
+                        border-left: 5px solid #005f73; 
+                        margin-bottom: 20px;
+                        height: 100%;
+                    ">
+                        <h5 style="color: #005f73; margin-top: 0; font-weight: 700; height: 50px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                            {proc_name}
+                        </h5>
+                        
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; border-top: 1px solid #f0f0f0; padding-top: 10px;">
+                            <div>
+                                <span style="display: block; color: #888; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px;">Frecuencia</span>
+                                <span style="font-size: 1.2em; font-weight: 600; color: #333;">{cantidad}</span>
+                            </div>
+                            <div style="text-align: right;">
+                                <span style="display: block; color: #888; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.5px;">Facturado</span>
+                                <span style="font-size: 1.2em; font-weight: 600; color: #2ec4b6;">{valor_fmt}</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                <span style="font-size: 0.8em; color: #555;">Participación</span>
+                                <span style="font-size: 0.8em; font-weight: bold; color: #005f73;">{pct:.1f}%</span>
+                            </div>
+                            <div style="background-color: #e0fbfc; height: 6px; border-radius: 3px; width: 100%;">
+                                <div style="background-color: #005f73; height: 6px; border-radius: 3px; width: {min(pct, 100)}%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
             
             # Gráfica de Barras Horizontal (Mejorada Visualmente)
             st.markdown("### 📊 Participación por Procedimiento (Top 15)")
